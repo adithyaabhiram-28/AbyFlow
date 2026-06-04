@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: abyflow_user
+      POSTGRES_PASSWORD: abyflow_password
+      POSTGRES_DB: abyflow_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+  
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - DOCKER_ENV=true
+      - DATABASE_URL=postgresql://abyflow_user:abyflow_password@db:5432/abyflow_db
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=super-secret-docker-key
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+    depends_on:
+      - db
+      - redis
+    
+  worker:
+    build: .
+    command: celery -A app.tasks.celery worker --loglevel=info
+    environment:
+      - DOCKER_ENV=true
+      - DATABASE_URL=postgresql://abyflow_user:abyflow_password@db:5432/abyflow_db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+volumes:
+  postgres_data:
