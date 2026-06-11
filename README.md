@@ -20,7 +20,6 @@ This project demonstrates a microservices-oriented architecture using Docker:
 4. *(Background)* Celery worker picks up task, updates `plan_tier` to 'pro' in Postgres.
 5. `GET /api/auth/dashboard` -> Returns updated user status.
 
-
 ## Tech Stack
 
 ### Backend
@@ -202,17 +201,13 @@ Note:
 ### 1. Register
 
 ```bash
-curl -X POST http://127.0.0.1:5000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d "{\"email\":\"test@test.com\",\"password\":\"mypassword123\"}"
+curl -X POST http://127.0.0.1:5000/api/auth/register -H "Content-Type: application/json" -d "{\"email\":\"test@test.com\",\"password\":\"mypassword123\"}"
 ```
 
 ### 2. Login
 
 ```bash
-curl -X POST http://127.0.0.1:5000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d "{\"email\":\"test@test.com\",\"password\":\"mypassword123\"}"
+curl -X POST http://127.0.0.1:5000/api/auth/login -H "Content-Type: application/json" -d "{\"email\":\"test@test.com\",\"password\":\"mypassword123\"}"
 ```
 
 Copy the JWT token from the login response.
@@ -220,8 +215,7 @@ Copy the JWT token from the login response.
 ### 3. Check Dashboard (Free)
 
 ```bash
-curl -X GET http://127.0.0.1:5000/api/auth/dashboard \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+curl -X GET http://127.0.0.1:5000/api/auth/dashboard -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
 Expected response:
@@ -235,16 +229,13 @@ Expected response:
 ### 4. Simulate Successful Payment
 
 ```bash
-curl -X POST http://127.0.0.1:5000/api/webhooks/stripe \
-  -H "Content-Type: application/json" \
-  -d "{\"id\":\"evt_success_1\",\"type\":\"checkout.session.completed\",\"data\":{\"object\":{\"metadata\":{\"user_email\":\"test@test.com\"}}}}"
+curl -X POST http://127.0.0.1:5000/api/webhooks/stripe -H "Content-Type: application/json" -d "{\"id\":\"evt_success_1\",\"type\":\"checkout.session.completed\",\"data\":{\"object\":{\"metadata\":{\"user_email\":\"test@test.com\"}}}}"
 ```
 
 ### 5. Check Dashboard Again
 
 ```bash
-curl -X GET http://127.0.0.1:5000/api/auth/dashboard \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+curl -X GET http://127.0.0.1:5000/api/auth/dashboard -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
 Expected response:
@@ -258,16 +249,13 @@ Expected response:
 ### 6. Simulate Failed Payment
 
 ```bash
-curl -X POST http://127.0.0.1:5000/api/webhooks/stripe \
-  -H "Content-Type: application/json" \
-  -d "{\"id\":\"evt_failed_1\",\"type\":\"invoice.payment_failed\",\"data\":{\"object\":{\"metadata\":{\"user_email\":\"test@test.com\"}}}}"
+curl -X POST http://127.0.0.1:5000/api/webhooks/stripe -H "Content-Type: application/json" -d "{\"id\":\"evt_failed_1\",\"type\":\"invoice.payment_failed\",\"data\":{\"object\":{\"metadata\":{\"user_email\":\"test@test.com\"}}}}"
 ```
 
 ### 7. Check Dashboard Again
 
 ```bash
-curl -X GET http://127.0.0.1:5000/api/auth/dashboard \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+curl -X GET http://127.0.0.1:5000/api/auth/dashboard -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
 Expected response:
