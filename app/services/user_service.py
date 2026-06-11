@@ -18,3 +18,13 @@ def upgrade_user_to_pro(email):
     user.plan_tier = 'pro'
     db.session.commit()
     return True, "User upgraded to pro"
+
+def downgrade_user_to_free(email):
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return False, "User not found"
+    if user.plan_tier == 'free':
+        return True, "User already Free"
+    user.plan_tier = "free"
+    db.session.commit()
+    return True, "User downgraded to free due to payment failure"
