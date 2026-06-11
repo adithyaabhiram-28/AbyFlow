@@ -30,6 +30,8 @@ def create_app():
     app.register_blueprint(sub_bp, url_prefix='/api/subscriptions')
     app.register_blueprint(webhook_bp, url_prefix='/api/webhooks')
 
+    from app.models import User, ProcessedEvent
+    
     # with app.app_context():
     #     db.create_all()
 

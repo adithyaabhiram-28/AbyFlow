@@ -25,7 +25,9 @@ def handle_stripe_webhook():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-    
+    print("=" * 50)
+    print("EVENT TYPE:", clean_data['event_type'])
+    print("USER:", clean_data['user_email'])
     if clean_data['event_type'] == 'checkout.session.completed':
         process_payment_task.delay(clean_data['user_email'])
     elif clean_data['event_type'] == 'invoice.payment_failed':
