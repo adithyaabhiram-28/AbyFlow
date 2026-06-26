@@ -17,6 +17,8 @@ def create_app():
     app.config['JWT_SECRET_KEY'] = 'super-secret-jwt-key-change-in-production'
     app.config['STRIPE_PUBLIC_KEY'] = os.getenv('STRIPE_PUBLISHABLE_KEY')
     app.config['STRIPE_SECRET_KEY'] = os.getenv('STRIPE_SECRET_KEY')
+    app.config["STRIPE_WEBHOOK_SECRET"] = os.getenv("STRIPE_WEBHOOK_SECRET")
+    print(app.config["STRIPE_WEBHOOK_SECRET"])
 
     db.init_app(app)
     bcrypt.init_app(app)

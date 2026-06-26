@@ -1,4 +1,6 @@
-from flask import Blueprint, request, jsonify
+import stripe
+import os
+from flask import Blueprint, request, jsonify, current_app
 from app.schemas.stripe_schema import StripeWebhookSchema
 from app.tasks import process_payment_task
 from app.extentions import db
@@ -7,9 +9,39 @@ from app.models import ProcessedEvent
 webhook_bp = Blueprint('webhooks', __name__)
 webhook_schema = StripeWebhookSchema()
 
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+
 @webhook_bp.route('/stripe', methods=['POST'])
 def handle_stripe_webhook():
-    payload = request.get_json()
+    payload = request.get_data()
+    sig_header = request.headers.get("Stripe-Signature")
+    endpoint_secret = current_app.config["STRIPE_WEBHOOK_SECRET"]
+
+    print("Webhook secret:", endpoint_secret)
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload,
+            sig_header,
+            endpoint_secret
+        )
+    except ValueError:
+        return jsonify({"error": "Invalid payload"}), 400
+
+    except stripe.error.SignatureVerificationError:
+        return jsonify({"error": "Invalid signature"}), 400
+
+    payload = event.to_dict()
+
+    event_type = payload["type"]
+
+    print("Received:", event_type)
+
+    if event_type not in (
+        "checkout.session.completed",
+        "invoice.payment_failed",
+    ):
+        return jsonify({"received": True}), 200
 
     stripe_event_id = payload.get('id')
     if not stripe_event_id:
@@ -19,11 +51,13 @@ def handle_stripe_webhook():
         return jsonify({"message":"Event already processed"}), 200
     
     try:
+        print(payload)
         clean_data = webhook_schema.load({
             "type": payload.get("type"),
             "user_email": payload.get("data", {}).get("object", {}).get("metadata", {}).get("user_email")
         })
     except Exception as e:
+        print("Schema Error:", e)
         return jsonify({"error": str(e)}), 400
     print("=" * 50)
     print("EVENT TYPE:", clean_data['event_type'])

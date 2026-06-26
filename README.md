@@ -14,6 +14,32 @@ This project demonstrates a microservices-oriented architecture using Docker:
 
 ## End-to-End Flow
 
+1. `POST /api/auth/register` → Creates a new user in PostgreSQL.
+2. `POST /api/auth/login` → Authenticates the user and returns a JWT access token.
+3. `POST /api/subscriptions/create-checkout` → Creates a Stripe Checkout Session and securely embeds the authenticated user's email inside the session metadata.
+4. User completes payment on the hosted Stripe Checkout page.
+5. Stripe sends a signed `checkout.session.completed` webhook to `/api/webhooks/stripe`.
+6. Flask verifies the webhook signature using `stripe.Webhook.construct_event()`. Invalid or spoofed requests are immediately rejected with **HTTP 400**.
+7. Verified webhook events are validated, duplicate event IDs are ignored, and valid payment events are dispatched to Celery through Redis for asynchronous processing.
+8. The Celery worker upgrades the user's subscription in PostgreSQL.
+9. `GET /api/auth/dashboard` returns the user's updated subscription status.
+
+---
+
+## Security & Reliability
+
+### Webhook Spoofing Prevention
+
+All incoming Stripe webhooks are verified using Stripe's webhook signing secret through `stripe.Webhook.construct_event()`. Requests with invalid signatures or modified payloads are immediately rejected with **HTTP 400 Bad Request**, preventing unauthorized events from reaching Celery, Redis, or PostgreSQL.
+
+### Idempotent Event Processing
+
+Each Stripe webhook contains a unique `stripe_event_id`. Before processing a payment event, AbyFlow checks whether the event ID has already been processed and stored in the `ProcessedEvent` table. Duplicate events are safely ignored, preventing repeated subscription upgrades caused by Stripe's automatic webhook retry mechanism.
+
+### Asynchronous Payment Processing
+
+Payment processing is handled asynchronously using Celery workers and Redis queues. The webhook endpoint performs only validation and task dispatching before returning a response, allowing long-running database operations to execute in the background while keeping the API responsive under heavy webhook traffi
+
 1. `POST /api/auth/register` -> Creates user in Postgres.
 2. `POST /api/subscriptions/create-checkout` -> Generates Stripe Checkout URL.
 3. `POST /api/webhooks/stripe` -> Receives Stripe event, instantly returns `200 OK`, pushes task to Redis.
@@ -196,6 +222,7 @@ Note:
 
 ---
 
+
 ## API Test Flow
 
 ### 1. Register
@@ -210,9 +237,9 @@ curl -X POST http://127.0.0.1:5000/api/auth/register -H "Content-Type: applicati
 curl -X POST http://127.0.0.1:5000/api/auth/login -H "Content-Type: application/json" -d "{\"email\":\"test@test.com\",\"password\":\"mypassword123\"}"
 ```
 
-Copy the JWT token from the login response.
+Copy the JWT token from the response.
 
-### 3. Check Dashboard (Free)
+### 3. Verify Dashboard (Free Plan)
 
 ```bash
 curl -X GET http://127.0.0.1:5000/api/auth/dashboard -H "Authorization: Bearer YOUR_JWT_TOKEN"
@@ -226,13 +253,29 @@ Expected response:
 }
 ```
 
-### 4. Simulate Successful Payment
+### 4. Create a Stripe Checkout Session
 
 ```bash
-curl -X POST http://127.0.0.1:5000/api/webhooks/stripe -H "Content-Type: application/json" -d "{\"id\":\"evt_success_1\",\"type\":\"checkout.session.completed\",\"data\":{\"object\":{\"metadata\":{\"user_email\":\"test@test.com\"}}}}"
+curl -X POST http://127.0.0.1:5000/api/subscriptions/create-checkout -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
-### 5. Check Dashboard Again
+The response returns a Stripe Checkout URL.
+
+### 5. Complete Payment
+
+Open the Checkout URL in your browser and complete the payment using Stripe's test card.
+
+### 6. Forward Stripe Webhooks
+
+In another terminal:
+
+```bash
+stripe listen --forward-to localhost:5000/api/webhooks/stripe
+```
+
+Stripe will securely forward signed webhook events to AbyFlow.
+
+### 7. Verify Dashboard (Pro Plan)
 
 ```bash
 curl -X GET http://127.0.0.1:5000/api/auth/dashboard -H "Authorization: Bearer YOUR_JWT_TOKEN"
@@ -246,23 +289,19 @@ Expected response:
 }
 ```
 
-### 6. Simulate Failed Payment
+### 8. Verify Webhook Security
+
+Attempting to send a webhook without a valid Stripe signature:
 
 ```bash
-curl -X POST http://127.0.0.1:5000/api/webhooks/stripe -H "Content-Type: application/json" -d "{\"id\":\"evt_failed_1\",\"type\":\"invoice.payment_failed\",\"data\":{\"object\":{\"metadata\":{\"user_email\":\"test@test.com\"}}}}"
-```
-
-### 7. Check Dashboard Again
-
-```bash
-curl -X GET http://127.0.0.1:5000/api/auth/dashboard -H "Authorization: Bearer YOUR_JWT_TOKEN"
+curl -X POST http://127.0.0.1:5000/api/webhooks/stripe -H "Content-Type: application/json" -d "{\"id\":\"evt_fake\",\"type\":\"checkout.session.completed\"}"
 ```
 
 Expected response:
 
 ```json
 {
-  "plan_tier": "free"
+  "error": "Invalid signature"
 }
 ```
 
