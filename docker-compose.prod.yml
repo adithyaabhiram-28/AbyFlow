@@ -58,6 +58,12 @@ services:
       dockerfile: Dockerfile
     command: celery -A app.tasks.celery worker --loglevel=info -c 2
     restart: always
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     environment:
       - DOCKER_ENV=true
       - FLASK_ENV=production

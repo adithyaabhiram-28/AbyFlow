@@ -63,6 +63,8 @@ class ProductionConfig(Config):
             'JWT_SECRET_KEY',
             'STRIPE_SECRET_KEY',
             'STRIPE_WEBHOOK_SECRET',
+            'REDIS_URL',
+            'APP_BASE_URL'
         ]
         missing = [var for var in required_vars if not os.getenv(var)]
         if missing:
