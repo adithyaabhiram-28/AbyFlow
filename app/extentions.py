@@ -1,7 +1,4 @@
-from flask_sqlalchemy import SQLAlchemy
-from flask_bcrypt import Bcrypt
-from flask_jwt_extended import JWTManager
+# Backward-compatibility alias for legacy imports
+from app.extensions import db, bcrypt, jwt
 
-db = SQLAlchemy()
-bcrypt = Bcrypt()
-jwt = JWTManager()
+__all__ = ['db', 'bcrypt', 'jwt']
