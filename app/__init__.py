@@ -2,6 +2,7 @@ import os
 import logging
 from dotenv import load_dotenv
 from flask import Flask, jsonify
+from werkzeug.middleware.proxy_fix import ProxyFix
 from sqlalchemy import text
 import redis
 
@@ -23,6 +24,9 @@ logger = logging.getLogger(__name__)
 def create_app(config_name=None, test_config=None):
     """Application factory for AbyFlow."""
     app = Flask(__name__)
+
+    # Apply proxy fix middleware
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_prefix=1)
 
     # Select configuration
     if config_name is None:
