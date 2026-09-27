@@ -2,12 +2,13 @@ from unittest.mock import patch, MagicMock
 
 
 def test_root_endpoint(client):
-    """Test root GET endpoint returns 200."""
+    """Test root GET endpoint renders the AbyFlow landing page."""
     res = client.get('/')
+
     assert res.status_code == 200
-    data = res.get_json()
-    assert data['name'] == 'AbyFlow API'
-    assert data['status'] == 'running'
+    assert res.content_type.startswith('text/html')
+    assert b'AbyFlow' in res.data
+    assert b'SaaS Billing' in res.data
 
 
 def test_health_check_endpoint_healthy(client):

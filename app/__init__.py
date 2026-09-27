@@ -1,7 +1,7 @@
 import os
 import logging
 from dotenv import load_dotenv
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 from werkzeug.middleware.proxy_fix import ProxyFix
 from sqlalchemy import text
 import redis
@@ -87,11 +87,7 @@ def create_app(config_name=None, test_config=None):
     # Root endpoint
     @app.route('/', methods=['GET'])
     def root():
-        return jsonify({
-            'name': 'AbyFlow API',
-            'version': '1.0.0',
-            'status': 'running'
-        }), 200
+        return render_template('index.html')
 
     # Register blueprints
     from app.routes.auth import auth_bp

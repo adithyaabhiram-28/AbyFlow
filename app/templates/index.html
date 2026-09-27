@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>AbyFlow — SaaS Billing API</title>
+
+    <meta
+        name="description"
+        content="AbyFlow is a production-deployed SaaS billing and subscription backend built with Flask, PostgreSQL, Redis, Celery, Docker and Stripe."
+    >
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            font-family:
+                Inter,
+                ui-sans-serif,
+                system-ui,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+            background: #09090b;
+            color: #f4f4f5;
+            line-height: 1.6;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .container {
+            width: min(1100px, calc(100% - 40px));
+            margin: 0 auto;
+        }
+
+        /* NAVBAR */
+
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 1px solid #27272a;
+            background: rgba(9, 9, 11, 0.9);
+            backdrop-filter: blur(12px);
+        }
+
+        .nav-inner {
+            height: 68px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            font-size: 21px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+
+        .logo span {
+            color: #a1a1aa;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 24px;
+            color: #a1a1aa;
+            font-size: 14px;
+        }
+
+        .nav-links a:hover {
+            color: #ffffff;
+        }
+
+        /* HERO */
+
+        .hero {
+            padding: 100px 0 80px;
+            text-align: center;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border: 1px solid #3f3f46;
+            border-radius: 999px;
+            color: #d4d4d8;
+            background: #18181b;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #22c55e;
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.7);
+        }
+
+        h1 {
+            margin: 24px 0 12px;
+            font-size: clamp(48px, 8vw, 82px);
+            line-height: 0.95;
+            letter-spacing: -4px;
+        }
+
+        .hero h2 {
+            margin: 0;
+            color: #a1a1aa;
+            font-size: clamp(20px, 3vw, 30px);
+            font-weight: 500;
+            letter-spacing: -0.5px;
+        }
+
+        .hero p {
+            max-width: 720px;
+            margin: 25px auto 0;
+            color: #a1a1aa;
+            font-size: 17px;
+        }
+
+        .buttons {
+            margin-top: 32px;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .button {
+            padding: 11px 18px;
+            border-radius: 8px;
+            border: 1px solid #3f3f46;
+            font-size: 14px;
+            font-weight: 700;
+            transition: 0.2s ease;
+        }
+
+        .button.primary {
+            background: #f4f4f5;
+            color: #09090b;
+            border-color: #f4f4f5;
+        }
+
+        .button:hover {
+            transform: translateY(-1px);
+            opacity: 0.9;
+        }
+
+        /* SECTIONS */
+
+        section {
+            padding: 70px 0;
+        }
+
+        .section-title {
+            margin-bottom: 32px;
+        }
+
+        .eyebrow {
+            color: #71717a;
+            text-transform: uppercase;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+        }
+
+        .section-title h2 {
+            margin: 8px 0;
+            font-size: 32px;
+            letter-spacing: -1px;
+        }
+
+        .section-title p {
+            margin: 0;
+            color: #a1a1aa;
+        }
+
+        /* FEATURE GRID */
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .card {
+            padding: 25px;
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            background: #111113;
+        }
+
+        .card h3 {
+            margin: 0 0 8px;
+            font-size: 18px;
+        }
+
+        .card p {
+            margin: 0;
+            color: #a1a1aa;
+            font-size: 14px;
+        }
+
+        /* API */
+
+        .api-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .endpoint {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 15px 18px;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            background: #111113;
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        .method {
+            min-width: 55px;
+            font-weight: 800;
+        }
+
+        .get {
+            color: #60a5fa;
+        }
+
+        .post {
+            color: #4ade80;
+        }
+
+        .path {
+            color: #d4d4d8;
+        }
+
+        /* FLOW */
+
+        .flow {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+        }
+
+        .flow-step {
+            padding: 20px;
+            border: 1px solid #27272a;
+            border-radius: 10px;
+            background: #111113;
+        }
+
+        .step-number {
+            color: #71717a;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .flow-step h3 {
+            margin: 8px 0;
+            font-size: 15px;
+        }
+
+        .flow-step p {
+            margin: 0;
+            color: #a1a1aa;
+            font-size: 13px;
+        }
+
+        /* ARCHITECTURE */
+
+        .architecture {
+            padding: 28px;
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            background: #111113;
+            overflow-x: auto;
+        }
+
+        .architecture pre {
+            margin: 0;
+            color: #d4d4d8;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+
+        /* FOOTER */
+
+        footer {
+            padding: 40px 0;
+            border-top: 1px solid #27272a;
+            color: #71717a;
+            font-size: 13px;
+        }
+
+        .footer-inner {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        /* MOBILE */
+
+        @media (max-width: 800px) {
+            .grid,
+            .flow {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            h1 {
+                letter-spacing: -2px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- NAVIGATION -->
+
+    <nav>
+        <div class="container nav-inner">
+            <a href="#" class="logo">
+                AbyFlow<span> / API</span>
+            </a>
+
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#api">API</a>
+                <a href="#architecture">Architecture</a>
+                <a href="#flow">Payment Flow</a>
+            </div>
+        </div>
+    </nav>
+
+
+    <!-- HERO -->
+
+    <header class="hero">
+        <div class="container">
+
+            <div class="badge">
+                <span class="status-dot"></span>
+                Production API
+            </div>
+
+            <h1>AbyFlow</h1>
+
+            <h2>SaaS Billing & Subscription API</h2>
+
+            <p>
+                A production-deployed Flask backend demonstrating secure
+                authentication, Stripe payments, signed webhooks,
+                asynchronous processing and containerized infrastructure.
+            </p>
+
+            <div class="buttons">
+                <a class="button primary" href="/abyflow/health">
+                    API Health
+                </a>
+
+                <a
+                    class="button"
+                    href="https://github.com/adithyaabhiram-28/AbyFlow"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    View GitHub
+                </a>
+            </div>
+
+        </div>
+    </header>
+
+
+    <!-- FEATURES -->
+
+    <section id="features">
+        <div class="container">
+
+            <div class="section-title">
+                <div class="eyebrow">Capabilities</div>
+                <h2>Backend built like a real SaaS service.</h2>
+                <p>
+                    The project focuses on the backend systems required
+                    for authentication, billing and asynchronous payment processing.
+                </p>
+            </div>
+
+            <div class="grid">
+
+                <div class="card">
+                    <h3>Authentication</h3>
+                    <p>
+                        JWT-secured registration, login and protected
+                        dashboard endpoints with password hashing and
+                        validation.
+                    </p>
+                </div>
+
+                <div class="card">
+                    <h3>Stripe Payments</h3>
+                    <p>
+                        Stripe Checkout integration for payment creation,
+                        success handling and cancellation flows.
+                    </p>
+                </div>
+
+                <div class="card">
+                    <h3>Webhook Processing</h3>
+                    <p>
+                        Stripe webhook signatures are verified and events
+                        are handled using idempotent database processing.
+                    </p>
+                </div>
+
+                <div class="card">
+                    <h3>Asynchronous Jobs</h3>
+                    <p>
+                        Celery workers process payment tasks through Redis
+                        without blocking the main Flask application.
+                    </p>
+                </div>
+
+                <div class="card">
+                    <h3>PostgreSQL</h3>
+                    <p>
+                        Persistent application data and payment state are
+                        stored in PostgreSQL.
+                    </p>
+                </div>
+
+                <div class="card">
+                    <h3>Docker Infrastructure</h3>
+                    <p>
+                        Flask, PostgreSQL, Redis and Celery run as isolated
+                        services using Docker Compose.
+                    </p>
+                </div>
+
+            </div>
+
+        </div>
+    </section>
+
+
+    <!-- API -->
+
+    <section id="api">
+        <div class="container">
+
+            <div class="section-title">
+                <div class="eyebrow">Endpoints</div>
+                <h2>API surface</h2>
+                <p>
+                    The landing page documents the main publicly accessible
+                    endpoints while the application continues to expose
+                    the complete backend API.
+                </p>
+            </div>
+
+            <div class="api-list">
+
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/abyflow/health</span>
+                </div>
+
+                <div class="endpoint">
+                    <span class="method post">POST</span>
+                    <span class="path">/abyflow/api/auth/register</span>
+                </div>
+
+                <div class="endpoint">
+                    <span class="method post">POST</span>
+                    <span class="path">/abyflow/api/auth/login</span>
+                </div>
+
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/abyflow/api/auth/dashboard</span>
+                </div>
+
+                <div class="endpoint">
+                    <span class="method post">POST</span>
+                    <span class="path">/abyflow/api/subscriptions/create-checkout</span>
+                </div>
+
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span class="path">/abyflow/api/subscriptions/success</span>
+                </div>
+
+                <div class="endpoint">
+                    <span class="method post">POST</span>
+                    <span class="path">/abyflow/api/webhooks/stripe</span>
+                </div>
+
+            </div>
+
+        </div>
+    </section>
+
+
+    <!-- PAYMENT FLOW -->
+
+    <section id="flow">
+        <div class="container">
+
+            <div class="section-title">
+                <div class="eyebrow">Payment Lifecycle</div>
+                <h2>How a payment moves through AbyFlow</h2>
+            </div>
+
+            <div class="flow">
+
+                <div class="flow-step">
+                    <div class="step-number">01</div>
+                    <h3>Authenticated Client</h3>
+                    <p>
+                        A JWT-authenticated user requests a checkout session.
+                    </p>
+                </div>
+
+                <div class="flow-step">
+                    <div class="step-number">02</div>
+                    <h3>Stripe Checkout</h3>
+                    <p>
+                        The user completes payment through Stripe Checkout.
+                    </p>
+                </div>
+
+                <div class="flow-step">
+                    <div class="step-number">03</div>
+                    <h3>Signed Webhook</h3>
+                    <p>
+                        Stripe sends a signed payment event to AbyFlow.
+                    </p>
+                </div>
+
+                <div class="flow-step">
+                    <div class="step-number">04</div>
+                    <h3>Celery Worker</h3>
+                    <p>
+                        Redis queues the event and a Celery worker processes it.
+                    </p>
+                </div>
+
+                <div class="flow-step">
+                    <div class="step-number">05</div>
+                    <h3>Database Update</h3>
+                    <p>
+                        PostgreSQL stores the resulting account state.
+                    </p>
+                </div>
+
+            </div>
+
+        </div>
+    </section>
+
+
+    <!-- ARCHITECTURE -->
+
+    <section id="architecture">
+        <div class="container">
+
+            <div class="section-title">
+                <div class="eyebrow">Infrastructure</div>
+                <h2>System architecture</h2>
+                <p>
+                    Containerized backend deployed on AWS EC2 behind Nginx.
+                </p>
+            </div>
+
+            <div class="architecture">
+<pre>
+                    ┌──────────────────────┐
+                    │       Client         │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │       Nginx          │
+                    │    HTTPS / Proxy     │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │   Flask + Gunicorn   │
+                    │      AbyFlow API     │
+                    └──────┬────────┬──────┘
+                           │        │
+                 ┌─────────┘        └──────────┐
+                 ▼                             ▼
+        ┌─────────────────┐           ┌─────────────────┐
+        │   PostgreSQL    │           │      Redis      │
+        │   Persistent DB │           │   Task Broker   │
+        └─────────────────┘           └────────┬────────┘
+                                               │
+                                               ▼
+                                      ┌─────────────────┐
+                                      │ Celery Worker   │
+                                      │ Async Processing │
+                                      └────────┬────────┘
+                                               │
+                                               ▼
+                                      ┌─────────────────┐
+                                      │     Stripe      │
+                                      │ Payment Events  │
+                                      └─────────────────┘
+</pre>
+            </div>
+
+        </div>
+    </section>
+
+
+    <!-- FOOTER -->
+
+    <footer>
+        <div class="container footer-inner">
+            <span>AbyFlow API v1.0.0</span>
+            <span>Backend demonstration • AWS EC2 deployment</span>
+        </div>
+    </footer>
+
+</body>
+</html>
