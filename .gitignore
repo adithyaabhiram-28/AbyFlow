@@ -5,3 +5,5 @@ instance/
 .env
 *.db
 *.pyc
+# Local review archive
+AbyFlow.zip

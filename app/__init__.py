@@ -6,12 +6,12 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from sqlalchemy import text
 import redis
 
-from app.config import config_by_name, ProductionConfig
-from app.extensions import db, bcrypt, jwt
-
 # Load environment variables from .env if present
 if not os.getenv('DOCKER_ENV'):
     load_dotenv()
+
+from app.config import config_by_name, ProductionConfig
+from app.extensions import db, bcrypt, jwt, migrate
 
 # Configure logging
 logging.basicConfig(
@@ -51,6 +51,9 @@ def create_app(config_name=None, test_config=None):
     db.init_app(app)
     bcrypt.init_app(app)
     jwt.init_app(app)
+    migrate.init_app(app, db)
+
+    from app import models
 
     # Health check endpoint
     @app.route('/health', methods=['GET'])
