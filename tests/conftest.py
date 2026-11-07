@@ -1,7 +1,7 @@
 import pytest
 from app import create_app
 from app.extensions import db as _db
-from app.models import User
+from app.models import User, Tenant, TenantMembership
 
 
 @pytest.fixture(scope='function')
@@ -30,15 +30,37 @@ def db(app):
 
 @pytest.fixture(scope='function')
 def registered_user(app, db):
-    """Create a test user and return the user object."""
+    """Create a test user with a personal workspace and owner membership."""
     from app.extensions import bcrypt
+
     user = User(
         email='testuser@example.com',
-        password_hash=bcrypt.generate_password_hash('Password123!').decode('utf-8'),
+        password_hash=bcrypt.generate_password_hash(
+            'Password123!'
+        ).decode('utf-8'),
         plan_tier='free'
     )
+
     db.session.add(user)
+    db.session.flush()
+
+    tenant = Tenant(
+        name='Personal Workspace',
+        slug=f'personal-user-{user.id}'
+    )
+
+    db.session.add(tenant)
+    db.session.flush()
+
+    membership = TenantMembership(
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role='owner'
+    )
+
+    db.session.add(membership)
     db.session.commit()
+
     return user
 
 
