@@ -46,6 +46,12 @@ class Tenant(db.Model):
         cascade='all, delete-orphan'
     )
 
+    customers = db.relationship(
+        'Customer',
+        back_populates='tenant',
+        cascade='all, delete-orphan'
+    )
+
 
 class TenantMembership(db.Model):
     __tablename__ = 'tenant_membership'
@@ -93,4 +99,67 @@ class TenantMembership(db.Model):
     tenant = db.relationship(
         'Tenant',
         back_populates='memberships'
+    )
+
+
+class Customer(db.Model):
+    __tablename__ = 'customer'
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'tenant_id',
+            'email',
+            name='uq_customer_tenant_email'
+        ),
+        db.Index(
+            'ix_customer_tenant_id_created_at',
+            'tenant_id',
+            'created_at'
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey('tenant.id', ondelete='CASCADE'),
+        nullable=False
+    )
+
+    name = db.Column(
+        db.String(150),
+        nullable=False
+    )
+
+    email = db.Column(
+        db.String(255),
+        nullable=True
+    )
+
+    company_name = db.Column(
+        db.String(150),
+        nullable=True
+    )
+
+    phone = db.Column(
+        db.String(30),
+        nullable=True
+    )
+
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        server_default=db.func.now()
+    )
+
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        server_default=db.func.now(),
+        onupdate=db.func.now()
+    )
+
+    tenant = db.relationship(
+        'Tenant',
+        back_populates='customers'
     )

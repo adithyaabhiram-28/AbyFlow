@@ -1,14 +1,13 @@
-
 import logging
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from app.services.tenant_service import (
     get_user_by_email,
     get_user_tenant_memberships,
-    get_tenant_membership,
 )
+from app.services.tenant_authorization import tenant_required
 
 logger = logging.getLogger(__name__)
 
@@ -45,48 +44,12 @@ def list_tenants():
 
 
 @tenant_bp.route('/current', methods=['GET'])
-@jwt_required()
+@tenant_required()
 def get_current_tenant():
-    """Resolve the requested tenant after validating membership."""
-    current_email = get_jwt_identity()
+    """Return the authenticated user's validated tenant context."""
 
-    tenant_id_header = request.headers.get('X-Tenant-ID')
-
-    if not tenant_id_header:
-        return jsonify({
-            'error': 'X-Tenant-ID header is required'
-        }), 400
-
-    try:
-        tenant_id = int(tenant_id_header)
-
-        if tenant_id <= 0:
-            raise ValueError('Tenant ID must be positive')
-
-    except (ValueError, TypeError):
-        return jsonify({
-            'error': 'X-Tenant-ID must be a positive integer'
-        }), 400
-
-    user = get_user_by_email(current_email)
-
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-
-    membership = get_tenant_membership(user, tenant_id)
-
-    if not membership:
-        logger.warning(
-            "Tenant access denied: user=%s tenant_id=%s",
-            current_email,
-            tenant_id,
-        )
-
-        return jsonify({
-            'error': 'You do not have access to this tenant'
-        }), 403
-
-    tenant = membership.tenant
+    tenant = g.current_tenant
+    membership = g.current_membership
 
     return jsonify({
         'tenant': {

@@ -2,6 +2,8 @@ import pytest
 from app import create_app
 from app.extensions import db as _db
 from app.models import User, Tenant, TenantMembership
+import sqlite3
+from sqlalchemy import event
 
 
 @pytest.fixture(scope='function')
@@ -10,6 +12,13 @@ def app():
     test_app = create_app('testing')
 
     with test_app.app_context():
+        @event.listens_for(_db.engine, 'connect')
+        def enable_sqlite_foreign_keys(connection, connection_record):
+            if isinstance(connection, sqlite3.Connection):
+                cursor = connection.cursor()
+                cursor.execute('PRAGMA foreign_keys=ON')
+                cursor.close()
+
         _db.create_all()
         yield test_app
         _db.session.remove()

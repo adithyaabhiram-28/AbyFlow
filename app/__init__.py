@@ -97,10 +97,12 @@ def create_app(config_name=None, test_config=None):
     from app.routes.subscriptions import sub_bp
     from app.routes.webhooks import webhook_bp
     from app.routes.tenants import tenant_bp
+    from app.routes.customers import customer_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(sub_bp, url_prefix='/api/subscriptions')
     app.register_blueprint(webhook_bp, url_prefix='/api/webhooks')
     app.register_blueprint(tenant_bp, url_prefix='/api/tenants')
+    app.register_blueprint(customer_bp, url_prefix='/api/customers')
 
     return app
