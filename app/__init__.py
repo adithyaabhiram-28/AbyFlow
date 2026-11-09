@@ -3,7 +3,7 @@ import logging
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template
 from werkzeug.middleware.proxy_fix import ProxyFix
-from sqlalchemy import text
+from sqlalchemy import event, text
 import redis
 
 # Load environment variables from .env if present
@@ -49,9 +49,22 @@ def create_app(config_name=None, test_config=None):
 
     # Initialize extensions
     db.init_app(app)
+    # Enable SQLite foreign-key enforcement on every connection.
+    with app.app_context():
+        if db.engine.dialect.name == 'sqlite':
+
+            @event.listens_for(db.engine, 'connect')
+            def enable_sqlite_foreign_keys(
+                dbapi_connection,
+                connection_record
+            ):
+                cursor = dbapi_connection.cursor()
+                cursor.execute('PRAGMA foreign_keys=ON')
+                cursor.close()
     bcrypt.init_app(app)
     jwt.init_app(app)
     migrate.init_app(app, db)
+
 
     from app import models
 
@@ -98,11 +111,13 @@ def create_app(config_name=None, test_config=None):
     from app.routes.webhooks import webhook_bp
     from app.routes.tenants import tenant_bp
     from app.routes.customers import customer_bp
+    from app.routes.invoices import invoice_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(sub_bp, url_prefix='/api/subscriptions')
     app.register_blueprint(webhook_bp, url_prefix='/api/webhooks')
     app.register_blueprint(tenant_bp, url_prefix='/api/tenants')
     app.register_blueprint(customer_bp, url_prefix='/api/customers')
+    app.register_blueprint(invoice_bp, url_prefix='/api/invoices')
 
     return app

@@ -2,8 +2,6 @@ import pytest
 from app import create_app
 from app.extensions import db as _db
 from app.models import User, Tenant, TenantMembership
-import sqlite3
-from sqlalchemy import event
 
 
 @pytest.fixture(scope='function')
@@ -12,12 +10,6 @@ def app():
     test_app = create_app('testing')
 
     with test_app.app_context():
-        @event.listens_for(_db.engine, 'connect')
-        def enable_sqlite_foreign_keys(connection, connection_record):
-            if isinstance(connection, sqlite3.Connection):
-                cursor = connection.cursor()
-                cursor.execute('PRAGMA foreign_keys=ON')
-                cursor.close()
 
         _db.create_all()
         yield test_app
@@ -82,3 +74,61 @@ def auth_headers(client, registered_user):
     )
     token = response.get_json()['token']
     return {'Authorization': f'Bearer {token}'}
+
+
+@pytest.fixture
+def registered_customer(db, registered_user):
+    """Create a customer in the registered user's workspace."""
+    from app.models import Customer, TenantMembership
+
+    membership = TenantMembership.query.filter_by(
+        user_id=registered_user.id
+    ).first()
+
+    customer = Customer(
+        tenant_id=membership.tenant_id,
+        name="Acme Corporation",
+        email="billing@acme.com",
+        company_name="Acme Inc.",
+        phone="+15551234567",
+    )
+
+    db.session.add(customer)
+    db.session.commit()
+
+    return customer
+
+
+@pytest.fixture
+def second_tenant(db, registered_user):
+    """Create a second tenant with a separate customer."""
+    from app.models import Customer, TenantMembership
+
+    tenant = Tenant(
+        name="Second Workspace",
+        slug="second-test-workspace",
+    )
+
+    db.session.add(tenant)
+    db.session.flush()
+
+    membership = TenantMembership(
+        user_id=registered_user.id,
+        tenant_id=tenant.id,
+        role="owner",
+    )
+
+    customer = Customer(
+        tenant_id=tenant.id,
+        name="Other Corporation",
+        email="billing@other.com",
+        company_name="Other Inc.",
+    )
+
+    db.session.add_all([membership, customer])
+    db.session.commit()
+
+    return {
+        "tenant": tenant,
+        "customer": customer,
+    }
