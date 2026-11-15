@@ -1,15 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>AbyFlow — SaaS Billing API</title>
-
-    <meta
-        name="description"
-        content="AbyFlow is a production-deployed SaaS billing and subscription backend built with Flask, PostgreSQL, Redis, Celery, Docker and Stripe."
-    >
+    <meta name="description"
+        content="AbyFlow is a production-deployed SaaS billing and subscription backend built with Flask, PostgreSQL, pgvector, Redis, Celery, Stripe and Google Gemini.">
 
     <style>
         * {
@@ -22,14 +19,8 @@
 
         body {
             margin: 0;
-            font-family:
-                Inter,
-                ui-sans-serif,
-                system-ui,
-                -apple-system,
-                BlinkMacSystemFont,
-                "Segoe UI",
-                sans-serif;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system,
+                BlinkMacSystemFont, "Segoe UI", sans-serif;
             background: #09090b;
             color: #f4f4f5;
             line-height: 1.6;
@@ -46,7 +37,6 @@
         }
 
         /* NAVBAR */
-
         nav {
             position: sticky;
             top: 0;
@@ -57,16 +47,18 @@
         }
 
         .nav-inner {
-            height: 68px;
+            min-height: 68px;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            gap: 20px;
         }
 
         .logo {
             font-size: 21px;
             font-weight: 800;
             letter-spacing: -0.5px;
+            white-space: nowrap;
         }
 
         .logo span {
@@ -85,7 +77,6 @@
         }
 
         /* HERO */
-
         .hero {
             padding: 100px 0 80px;
             text-align: center;
@@ -143,6 +134,7 @@
         }
 
         .button {
+            display: inline-block;
             padding: 11px 18px;
             border-radius: 8px;
             border: 1px solid #3f3f46;
@@ -163,7 +155,6 @@
         }
 
         /* SECTIONS */
-
         section {
             padding: 70px 0;
         }
@@ -192,10 +183,9 @@
         }
 
         /* FEATURE GRID */
-
         .grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 16px;
         }
 
@@ -218,7 +208,6 @@
         }
 
         /* API */
-
         .api-list {
             display: grid;
             gap: 10px;
@@ -234,6 +223,7 @@
             background: #111113;
             font-family: monospace;
             font-size: 14px;
+            overflow-wrap: anywhere;
         }
 
         .method {
@@ -254,10 +244,9 @@
         }
 
         /* FLOW */
-
         .flow {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 12px;
         }
 
@@ -286,7 +275,6 @@
         }
 
         /* ARCHITECTURE */
-
         .architecture {
             padding: 28px;
             border: 1px solid #27272a;
@@ -296,15 +284,16 @@
         }
 
         .architecture pre {
+            width: max-content;
+            min-width: 100%;
             margin: 0;
             color: #d4d4d8;
             font-family: monospace;
-            font-size: 14px;
-            line-height: 1.8;
+            font-size: 13px;
+            line-height: 1.75;
         }
 
         /* FOOTER */
-
         footer {
             padding: 40px 0;
             border-top: 1px solid #27272a;
@@ -320,9 +309,11 @@
         }
 
         /* MOBILE */
-
         @media (max-width: 800px) {
-            .grid,
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
             .flow {
                 grid-template-columns: 1fr;
             }
@@ -334,19 +325,47 @@
             h1 {
                 letter-spacing: -2px;
             }
+
+            .hero {
+                padding: 76px 0 64px;
+            }
+
+            section {
+                padding: 58px 0;
+            }
+
+            .section-title h2 {
+                font-size: 28px;
+            }
+
+            .architecture {
+                padding: 18px;
+            }
+
+            .architecture pre {
+                font-size: 11px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            html {
+                scroll-behavior: auto;
+            }
+
+            *,
+            *::before,
+            *::after {
+                transition-duration: 0.01ms !important;
+            }
         }
     </style>
 </head>
 
 <body>
-
     <!-- NAVIGATION -->
-
     <nav>
         <div class="container nav-inner">
-            <a href="#" class="logo">
-                AbyFlow<span> / API</span>
-            </a>
+            <a href="#" class="logo">AbyFlow<span> / API</span></a>
 
             <div class="nav-links">
                 <a href="#features">Features</a>
@@ -357,25 +376,21 @@
         </div>
     </nav>
 
-
     <!-- HERO -->
-
     <header class="hero">
         <div class="container">
-
             <div class="badge">
                 <span class="status-dot"></span>
                 Production API
             </div>
 
             <h1>AbyFlow</h1>
-
-            <h2>SaaS Billing & Subscription API</h2>
+            <h2>SaaS Billing &amp; Subscription API</h2>
 
             <p>
                 A production-deployed Flask backend demonstrating secure
                 authentication, Stripe payments, signed webhooks,
-                asynchronous processing and containerized infrastructure.
+                asynchronous processing and AI-powered backend capabilities.
             </p>
 
             <div class="buttons">
@@ -383,36 +398,28 @@
                     API Health
                 </a>
 
-                <a
-                    class="button"
-                    href="https://github.com/adithyaabhiram-28/AbyFlow"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                >
+                <a class="button" href="https://github.com/adithyaabhiram-28/AbyFlow" target="_blank"
+                    rel="noopener noreferrer">
                     View GitHub
                 </a>
             </div>
-
         </div>
     </header>
 
-
     <!-- FEATURES -->
-
     <section id="features">
         <div class="container">
-
             <div class="section-title">
                 <div class="eyebrow">Capabilities</div>
                 <h2>Backend built like a real SaaS service.</h2>
                 <p>
                     The project focuses on the backend systems required
-                    for authentication, billing and asynchronous payment processing.
+                    for authentication, billing, AI services and reliable
+                    asynchronous processing.
                 </p>
             </div>
 
             <div class="grid">
-
                 <div class="card">
                     <h3>Authentication</h3>
                     <p>
@@ -441,8 +448,9 @@
                 <div class="card">
                     <h3>Asynchronous Jobs</h3>
                     <p>
-                        Celery workers process payment tasks through Redis
-                        without blocking the main Flask application.
+                        Celery workers process background tasks through
+                        Redis without blocking the main Flask application.
+                        Celery Beat schedules recurring jobs.
                     </p>
                 </div>
 
@@ -450,29 +458,52 @@
                     <h3>PostgreSQL</h3>
                     <p>
                         Persistent application data and payment state are
-                        stored in PostgreSQL.
+                        stored in PostgreSQL, with pgvector enabled for
+                        vector storage and retrieval.
                     </p>
                 </div>
 
                 <div class="card">
                     <h3>Docker Infrastructure</h3>
                     <p>
-                        Flask, PostgreSQL, Redis and Celery run as isolated
-                        services using Docker Compose.
+                        Flask, PostgreSQL, Redis, Celery Worker and Celery
+                        Beat run as isolated services using Docker Compose.
                     </p>
                 </div>
 
-            </div>
+                <div class="card">
+                    <h3>Gemini AI Assistant</h3>
+                    <p>
+                        Google Gemini powers the AI assistant, with
+                        provider-native function calling for application
+                        tools and AI usage tracking.
+                    </p>
+                </div>
 
+                <div class="card">
+                    <h3>RAG &amp; Vector Search</h3>
+                    <p>
+                        Gemini embeddings are stored as 1,536-dimensional
+                        vectors in PostgreSQL pgvector to support
+                        tenant-scoped knowledge retrieval.
+                    </p>
+                </div>
+
+                <div class="card">
+                    <h3>Outbox Processing</h3>
+                    <p>
+                        A scheduled Celery task checks the billing outbox
+                        and processes queued events asynchronously, with
+                        processing results tracked by the backend.
+                    </p>
+                </div>
+            </div>
         </div>
     </section>
 
-
     <!-- API -->
-
     <section id="api">
         <div class="container">
-
             <div class="section-title">
                 <div class="eyebrow">Endpoints</div>
                 <h2>API surface</h2>
@@ -484,7 +515,6 @@
             </div>
 
             <div class="api-list">
-
                 <div class="endpoint">
                     <span class="method get">GET</span>
                     <span class="path">/abyflow/health</span>
@@ -519,25 +549,19 @@
                     <span class="method post">POST</span>
                     <span class="path">/abyflow/api/webhooks/stripe</span>
                 </div>
-
             </div>
-
         </div>
     </section>
 
-
     <!-- PAYMENT FLOW -->
-
     <section id="flow">
         <div class="container">
-
             <div class="section-title">
                 <div class="eyebrow">Payment Lifecycle</div>
                 <h2>How a payment moves through AbyFlow</h2>
             </div>
 
             <div class="flow">
-
                 <div class="flow-step">
                     <div class="step-number">01</div>
                     <h3>Authenticated Client</h3>
@@ -566,7 +590,8 @@
                     <div class="step-number">04</div>
                     <h3>Celery Worker</h3>
                     <p>
-                        Redis queues the event and a Celery worker processes it.
+                        The event is queued through Redis and processed
+                        asynchronously by a Celery worker.
                     </p>
                 </div>
 
@@ -574,21 +599,17 @@
                     <div class="step-number">05</div>
                     <h3>Database Update</h3>
                     <p>
-                        PostgreSQL stores the resulting account state.
+                        PostgreSQL stores the resulting payment and
+                        subscription state.
                     </p>
                 </div>
-
             </div>
-
         </div>
     </section>
 
-
     <!-- ARCHITECTURE -->
-
     <section id="architecture">
         <div class="container">
-
             <div class="section-title">
                 <div class="eyebrow">Infrastructure</div>
                 <h2>System architecture</h2>
@@ -598,56 +619,56 @@
             </div>
 
             <div class="architecture">
-<pre>
-                    ┌──────────────────────┐
-                    │       Client         │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │       Nginx          │
-                    │    HTTPS / Proxy     │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │   Flask + Gunicorn   │
-                    │      AbyFlow API     │
-                    └──────┬────────┬──────┘
-                           │        │
-                 ┌─────────┘        └──────────┐
-                 ▼                             ▼
-        ┌─────────────────┐           ┌─────────────────┐
-        │   PostgreSQL    │           │      Redis      │
-        │   Persistent DB │           │   Task Broker   │
-        └─────────────────┘           └────────┬────────┘
-                                               │
-                                               ▼
-                                      ┌─────────────────┐
-                                      │ Celery Worker   │
-                                      │ Async Processing │
-                                      └────────┬────────┘
-                                               │
-                                               ▼
-                                      ┌─────────────────┐
-                                      │     Stripe      │
-                                      │ Payment Events  │
-                                      └─────────────────┘
+                <pre>
+                         ┌────────────────────────┐
+                         │         Client         │
+                         └────────────┬───────────┘
+                                      │
+                                      ▼
+                         ┌────────────────────────┐
+                         │         Nginx          │
+                         │     HTTPS / Proxy      │
+                         └────────────┬───────────┘
+                                      │
+                                      ▼
+                         ┌────────────────────────┐
+                         │   Flask + Gunicorn     │
+                         │      AbyFlow API       │
+                         └──────┬──────┬──────┬───┘
+                                │      │      │
+                    ┌───────────┘      │      └─────────────┐
+                    ▼                  ▼                    ▼
+          ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+          │   PostgreSQL    │  │      Redis      │  │  Google Gemini  │
+          │  + pgvector     │  │   Task Broker   │  │    AI API       │
+          └─────────────────┘  └────────┬────────┘  └─────────────────┘
+                                        │
+                              ┌─────────┴─────────┐
+                              ▼                   ▼
+                    ┌─────────────────┐ ┌─────────────────┐
+                    │  Celery Worker  │ │   Celery Beat   │
+                    │ Async Processing│ │ Task Scheduler  │
+                    └────────┬────────┘ └─────────────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │   PostgreSQL    │
+                    │ State / Outbox  │
+                    └─────────────────┘
+
+          Stripe Checkout and signed webhooks integrate with the API.
 </pre>
             </div>
-
         </div>
     </section>
 
-
     <!-- FOOTER -->
-
     <footer>
         <div class="container footer-inner">
             <span>AbyFlow API v1.0.0</span>
             <span>Backend demonstration • AWS EC2 deployment</span>
         </div>
     </footer>
-
 </body>
+
 </html>
