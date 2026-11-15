@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 from app.repositories.billing_repository import BillingRepository
 from app.services.rag.retrieval import search_similar_chunks
 
@@ -145,8 +145,7 @@ TOOL_DEFINITIONS = [
 
 def validate_tool_arguments(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     """Strictly validate AI tool arguments before execution."""
-
-    allowed_arguments = {
+    allowed_args = {
         "get_billing_overview": set(),
         "get_invoice_summary": {"limit", "status"},
         "get_customer_summary": {"limit"},
@@ -156,13 +155,13 @@ def validate_tool_arguments(tool_name: str, args: Dict[str, Any]) -> Dict[str, A
         "search_billing_docs": {"query", "limit"},
     }
 
-    if tool_name not in allowed_arguments:
+    if tool_name not in allowed_args:
         raise ValueError(f"Unknown or unauthorized tool: '{tool_name}'")
 
     if not isinstance(args, dict):
         raise ValueError("Tool arguments must be a dictionary")
 
-    unexpected = set(args) - allowed_arguments[tool_name]
+    unexpected = set(args) - allowed_args[tool_name]
     if unexpected:
         raise ValueError(
             f"Unexpected argument(s): {', '.join(sorted(unexpected))}"
@@ -170,7 +169,7 @@ def validate_tool_arguments(tool_name: str, args: Dict[str, Any]) -> Dict[str, A
 
     clean_args = {}
 
-    def validate_integer(name, minimum, maximum):
+    def validate_integer(name, min_val, max_val):
         if name not in args:
             return
 
@@ -180,14 +179,14 @@ def validate_tool_arguments(tool_name: str, args: Dict[str, Any]) -> Dict[str, A
         if type(value) is not int:
             raise ValueError(f"{name} must be an integer")
 
-        if not minimum <= value <= maximum:
+        if not min_val <= value <= max_val:
             raise ValueError(
-                f"{name} must be between {minimum} and {maximum}"
+                f"{name} must be between {min_val} and {max_val}"
             )
 
         clean_args[name] = value
 
-    def validate_string(name, maximum_length, required=False):
+    def validate_string(name, max_len, required=False):
         if name not in args:
             if required:
                 raise ValueError(f"{name} is required")
@@ -203,9 +202,9 @@ def validate_tool_arguments(tool_name: str, args: Dict[str, Any]) -> Dict[str, A
         if not value:
             raise ValueError(f"{name} must not be empty")
 
-        if len(value) > maximum_length:
+        if len(value) > max_len:
             raise ValueError(
-                f"{name} must not exceed {maximum_length} characters"
+                f"{name} must not exceed {max_len} characters"
             )
 
         clean_args[name] = value

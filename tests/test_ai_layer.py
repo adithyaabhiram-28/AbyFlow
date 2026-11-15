@@ -227,11 +227,11 @@ def test_embedding_requires_api_key_outside_testing(app):
     app.config.update(
         TESTING=False,
         AI_ALLOW_MOCK_EMBEDDINGS=False,
-        OPENAI_API_KEY=None,
+        GEMINI_API_KEY=None,
     )
 
     with app.app_context():
-        with pytest.raises(EmbeddingGenerationError, match="OPENAI_API_KEY"):
+        with pytest.raises(EmbeddingGenerationError, match="GEMINI_API_KEY"):
             generate_embedding("AbyFlow billing")
 
 
@@ -240,7 +240,7 @@ def test_embedding_allows_explicit_development_mock(app):
     app.config.update(
         TESTING=False,
         AI_ALLOW_MOCK_EMBEDDINGS=True,
-        OPENAI_API_KEY=None,
+        GEMINI_API_KEY=None,
     )
 
     with app.app_context():
@@ -272,19 +272,19 @@ def test_embedding_rejects_non_finite_values(invalid_value):
 
 
 def test_embedding_api_failure_does_not_fallback_to_mock(app):
-    """OpenAI failures must propagate instead of silently generating mock vectors."""
+    """Gemini failures must propagate instead of silently generating mock vectors."""
     from unittest.mock import patch
 
     app.config.update(
         TESTING=False,
         AI_ALLOW_MOCK_EMBEDDINGS=False,
-        OPENAI_API_KEY="sk-live-test-placeholder",
+        GEMINI_API_KEY="AIzaSy-test-placeholder",
     )
 
     with app.app_context():
-        with patch("openai.OpenAI") as mock_openai:
-            mock_client = mock_openai.return_value
-            mock_client.embeddings.create.side_effect = RuntimeError(
+        with patch("google.genai.Client") as mock_gemini:
+            mock_client = mock_gemini.return_value
+            mock_client.models.embed_content.side_effect = RuntimeError(
                 "Simulated provider failure"
             )
 
@@ -435,7 +435,7 @@ def test_ingestion_failure_rolls_back_new_document(app, db):
 # ===================================================================
 
 def test_tool_definitions_valid():
-    """All registered tools have valid OpenAI schema definitions."""
+    """Tool definitions retain the provider-neutral function schema contract."""
     assert len(TOOL_DEFINITIONS) == 7
     names = [t['function']['name'] for t in TOOL_DEFINITIONS]
     assert 'get_billing_overview' in names
@@ -588,6 +588,16 @@ def test_calculate_token_cost():
     # (1000 * 0.00000015) + (500 * 0.00000060) = 0.00015 + 0.00030 = 0.000450
     assert cost == Decimal('0.000450')
 
+
+
+def test_calculate_gemini_free_tier_token_cost():
+    """Gemini Developer API free-tier calls are recorded at zero USD cost."""
+    cost = calculate_token_cost(
+        model='gemini-3.8-flash',
+        prompt_tokens=1000,
+        completion_tokens=500,
+    )
+    assert cost == Decimal('0.000000')
 
 
 def test_calculate_token_cost_rejects_unconfigured_model():
@@ -992,3 +1002,111 @@ def test_rag_rejects_mismatched_document_and_chunk_tenants(
 
         assert "MISMATCHED_SECRET_TENANT_A_CHUNK" not in contents
         assert "MISMATCHED_SECRET_TENANT_B_CHUNK" not in contents
+
+
+def test_gemini_thought_signature_survives_conversation_round_trip(
+    app, db, workspace_with_data
+):
+    """Gemini function-call content and thought signatures survive persistence."""
+    from google.genai import types
+    from app.services.ai.client import GeminiClient
+
+    with app.app_context():
+        conv = get_or_create_conversation(
+            user_id=workspace_with_data["user_id"],
+            tenant_id=workspace_with_data["tenant_id"],
+            title="Gemini signature persistence test",
+        )
+
+        original_content = types.Content(
+            role="model",
+            parts=[
+                types.Part(
+                    function_call=types.FunctionCall(
+                        name="get_billing_overview",
+                        args={},
+                    ),
+                    thought_signature=b"test-thought-signature",
+                )
+            ],
+        )
+
+        provider_content = original_content.model_dump(
+            mode="json",
+            exclude_none=True,
+        )
+
+        add_message(
+            conversation_id=conv.id,
+            role="user",
+            content="Show my billing overview.",
+        )
+
+        add_message(
+            conversation_id=conv.id,
+            role="assistant",
+            content=None,
+            tool_calls=[
+                {
+                    "id": "gemini_call_1",
+                    "name": "get_billing_overview",
+                    "arguments": {},
+                    "provider_content": provider_content,
+                }
+            ],
+        )
+
+        add_message(
+            conversation_id=conv.id,
+            role="tool",
+            content='{"customer_count":1}',
+            tool_call_id="gemini_call_1",
+            tool_name="get_billing_overview",
+        )
+
+        history = get_conversation_history(conv.id, limit=10)
+
+        assistant_message = next(
+            message for message in history
+            if message["role"] == "assistant"
+        )
+
+        assert assistant_message["tool_calls"][0]["provider_content"] == provider_content
+
+        system_instruction, contents = GeminiClient._convert_messages(
+            history, types
+        )
+
+        assert contents[1].role == "model"
+        restored_part = contents[1].parts[0]
+
+        assert restored_part.function_call.name == "get_billing_overview"
+        assert restored_part.thought_signature == b"test-thought-signature"
+
+        assert contents[2].role == "user"
+        assert contents[2].parts[0].function_response.name == "get_billing_overview"
+        assert contents[2].parts[0].function_response.response == {
+            "result": {"customer_count": 1}
+        }
+
+def test_calculate_token_cost_gemini_paid_tier(monkeypatch):
+    monkeypatch.setenv('GEMINI_BILLING_TIER', 'paid')
+
+    cost = calculate_token_cost(
+        model='gemini-3.8-flash',
+        prompt_tokens=1_000_000,
+        completion_tokens=1_000_000,
+    )
+
+    assert cost == Decimal('4.500000')
+
+
+def test_calculate_token_cost_rejects_invalid_gemini_tier(monkeypatch):
+    monkeypatch.setenv('GEMINI_BILLING_TIER', 'unknown')
+
+    with pytest.raises(ValueError, match='GEMINI_BILLING_TIER'):
+        calculate_token_cost(
+            model='gemini-3.8-flash',
+            prompt_tokens=100,
+            completion_tokens=100,
+        )

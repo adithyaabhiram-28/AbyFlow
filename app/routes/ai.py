@@ -4,7 +4,7 @@ from app.services.tenant_authorization import tenant_required
 from app.services.platform_authorization import platform_role_required
 from app.services.ai.assistant import process_chat_message
 from app.services.ai.conversation import list_conversations, get_conversation_history
-from app.services.ai.client import AIClientError, AIProviderError, AITimeoutError
+from app.services.ai.client import AIProviderError, AITimeoutError
 from app.services.rag.ingestion import seed_platform_documentation
 from app.models import AIConversation, AIUsage
 

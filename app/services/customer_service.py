@@ -141,21 +141,18 @@ def _commit_customer_changes():
     except IntegrityError as error:
         db.session.rollback()
 
-        # SQLite and PostgreSQL both identify unique constraint
-        # violations in their underlying database error messages.
-        original_error = str(error.orig).lower()
+        orig_err = str(error.orig).lower()
 
         if (
-            'uq_customer_tenant_email' in original_error
-            or 'customer.tenant_id, customer.email' in original_error
+            'uq_customer_tenant_email' in orig_err
+            or 'customer.tenant_id, customer.email' in orig_err
             or 'unique constraint failed: customer.tenant_id, customer.email'
-            in original_error
+            in orig_err
         ):
             raise CustomerAlreadyExistsError(
                 'A customer with this email already exists'
             ) from error
 
-        # Do not disguise unrelated database errors.
         raise
 
 

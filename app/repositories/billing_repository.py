@@ -1,7 +1,5 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from sqlalchemy import func, select
-from app.extensions import db
 from app.models import User, Tenant, Customer, Invoice, Payment
 
 
@@ -17,15 +15,12 @@ class BillingRepository:
         user = User.query.filter_by(id=user_id).first()
         tenant = Tenant.query.filter_by(id=tenant_id).first()
 
-        # Count customer records
         customer_count = Customer.query.filter_by(tenant_id=tenant_id).count()
 
-        # Count invoices and sum totals
         invoices = Invoice.query.filter_by(tenant_id=tenant_id).all()
         invoice_count = len(invoices)
         total_invoiced = sum((inv.total for inv in invoices), Decimal('0.00'))
 
-        # Count successful payments and total paid cents
         payments = Payment.query.filter_by(user_id=user_id, status='succeeded').all()
         payment_count = len(payments)
         total_paid_cents = sum((p.amount_cents for p in payments), 0)

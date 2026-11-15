@@ -179,7 +179,7 @@ def search_similar_chunks(
         raise ValueError("tenant_id is required for tenant-isolated retrieval.")
 
     top_k = max(1, min(top_k or 3, 10))
-    query_vector = generate_embedding(query.strip())
+    query_vector = generate_embedding(query.strip(), task_type='RETRIEVAL_QUERY')
 
     dialect = db.session.get_bind().dialect.name
 

@@ -44,12 +44,12 @@ services:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - APP_BASE_URL=${APP_BASE_URL}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - AI_MODEL=${AI_MODEL:-gpt-4o-mini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-gemini-3.8-flash}
       - AI_MAX_TOKENS=${AI_MAX_TOKENS:-1024}
       - AI_TEMPERATURE=${AI_TEMPERATURE:-0.0}
       - AI_REQUEST_TIMEOUT=${AI_REQUEST_TIMEOUT:-15.0}
-      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL:-gemini-embedding-001}
       - AI_ALLOW_MOCK_EMBEDDINGS=false
     depends_on:
       db:
@@ -80,12 +80,12 @@ services:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - APP_BASE_URL=${APP_BASE_URL}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - AI_MODEL=${AI_MODEL:-gpt-4o-mini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-gemini-3.8-flash}
       - AI_MAX_TOKENS=${AI_MAX_TOKENS:-1024}
       - AI_TEMPERATURE=${AI_TEMPERATURE:-0.0}
       - AI_REQUEST_TIMEOUT=${AI_REQUEST_TIMEOUT:-15.0}
-      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL:-gemini-embedding-001}
       - AI_ALLOW_MOCK_EMBEDDINGS=false
     depends_on:
       db:
@@ -110,12 +110,12 @@ services:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - APP_BASE_URL=${APP_BASE_URL}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - AI_MODEL=${AI_MODEL:-gpt-4o-mini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-gemini-3.8-flash}
       - AI_MAX_TOKENS=${AI_MAX_TOKENS:-1024}
       - AI_TEMPERATURE=${AI_TEMPERATURE:-0.0}
       - AI_REQUEST_TIMEOUT=${AI_REQUEST_TIMEOUT:-15.0}
-      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL:-gemini-embedding-001}
       - AI_ALLOW_MOCK_EMBEDDINGS=false
     depends_on:
       db:

@@ -43,7 +43,6 @@ def process_chat_message(
 
     user_text = message.strip()
 
-    # 1. Conversation resolution
     conv = get_or_create_conversation(
         user_id=user_id,
         tenant_id=tenant_id,
@@ -51,14 +50,12 @@ def process_chat_message(
         title=user_text[:50]
     )
 
-    # 2. Persist user message
     add_message(
         conversation_id=conv.id,
         role='user',
         content=user_text
     )
 
-    # 3. Retrieve relevant documentation for context (RAG)
     try:
         rag_chunks = search_similar_chunks(query=user_text, tenant_id=tenant_id, top_k=2)
     except Exception as e:
@@ -67,7 +64,6 @@ def process_chat_message(
 
     system_prompt = format_system_prompt_with_context(rag_chunks)
 
-    # 4. Construct messages payload
     history = get_conversation_history(conv.id, limit=12)
 
     api_messages = [{'role': 'system', 'content': system_prompt}]
@@ -85,14 +81,13 @@ def process_chat_message(
         api_messages.append(msg_obj)
 
     ai_client = client or get_ai_client()
-    model_name = current_app.config.get('AI_MODEL', 'gpt-4o-mini')
+    model_name = current_app.config.get('AI_MODEL', 'gemini-3.8-flash')
 
     total_prompt_tokens = 0
     total_completion_tokens = 0
     executed_tool_calls = []
     final_content = ""
 
-    # 5. LLM Call loop with tool calling support
     for iteration in range(MAX_TOOL_ITERATIONS):
         response = ai_client.chat_completion(
             messages=api_messages,
@@ -112,8 +107,6 @@ def process_chat_message(
             final_content = content or "I have processed your request."
             break
 
-        # Assistant message requesting tool call(s)
-        # Reconstruct the official OpenAI assistant tool-call message.
         assistant_tool_calls = [
             {
                 'id': tc['id'],
@@ -124,7 +117,8 @@ def process_chat_message(
                         tc.get('arguments', {}),
                         separators=(',', ':')
                     )
-                }
+                },
+                **({'provider_content': tc['provider_content']} if tc.get('provider_content') else {})
             }
             for tc in tool_calls
         ]
@@ -137,7 +131,6 @@ def process_chat_message(
 
         api_messages.append(assistant_tool_message)
 
-        # Persist the assistant declaration before persisting tool responses.
         add_message(
             conversation_id=conv.id,
             role='assistant',
@@ -150,7 +143,6 @@ def process_chat_message(
             tc_name = tc['name']
             tc_args = tc.get('arguments', {})
 
-            # Execute tool deterministically with server context
             tool_result = execute_tool(
                 tool_name=tc_name,
                 raw_arguments=tc_args,
@@ -164,7 +156,6 @@ def process_chat_message(
                 'result': tool_result
             })
 
-            # Record in DB & message array
             add_message(
                 conversation_id=conv.id,
                 role='tool',
@@ -181,7 +172,6 @@ def process_chat_message(
                 'content': json.dumps(tool_result)
             })
 
-    # If the loop ended after tool calls without final content, do a final turn
     if not final_content and executed_tool_calls:
         try:
             final_resp = ai_client.chat_completion(
@@ -196,7 +186,6 @@ def process_chat_message(
             logger.warning("Final synthesis turn failed: %s", str(e))
             final_content = "Here is the requested billing information based on your workspace records."
 
-    # 6. Persist assistant final response
     add_message(
         conversation_id=conv.id,
         role='assistant',
@@ -205,7 +194,6 @@ def process_chat_message(
 
     elapsed_ms = int((time.perf_counter() - start_time) * 1000)
 
-    # 7. Record AI Usage
     total_tokens = total_prompt_tokens + total_completion_tokens
     cost = calculate_token_cost(model_name, total_prompt_tokens, total_completion_tokens)
 

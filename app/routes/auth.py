@@ -72,8 +72,6 @@ def register():
         )
 
         db.session.add(user)
-
-        # Flush obtains the generated user ID without committing.
         db.session.flush()
 
         tenant = Tenant(
@@ -91,8 +89,6 @@ def register():
         )
 
         db.session.add(membership)
-
-        # All three records are committed together.
         db.session.commit()
 
         logger.info(
@@ -162,14 +158,14 @@ def login():
 @jwt_required()
 def dashboard():
     """Return dashboard details for the authenticated user."""
-    current_user_email = get_jwt_identity()
+    user_email = get_jwt_identity()
 
-    if not current_user_email:
+    if not user_email:
         return jsonify({'error': 'Invalid authentication token'}), 401
 
     try:
         user = User.query.filter_by(
-            email=current_user_email.strip().lower()
+            email=user_email.strip().lower()
         ).first()
 
         if not user:
@@ -184,6 +180,6 @@ def dashboard():
     except Exception:
         logger.exception(
             "Error fetching dashboard for %s",
-            current_user_email,
+            user_email,
         )
         return jsonify({'error': 'Internal server error'}), 500

@@ -65,7 +65,7 @@ def ingest_document(
             db.session.flush()
 
         for index, chunk_text_content in enumerate(chunks):
-            embedding_vec = generate_embedding(chunk_text_content)
+            embedding_vec = generate_embedding(chunk_text_content, task_type='RETRIEVAL_DOCUMENT')
 
             chunk = DocumentChunk(
                 document_id=doc.id,

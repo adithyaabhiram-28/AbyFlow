@@ -92,8 +92,7 @@ def _claim_outbox_batch():
     """Claim one available event with a unique ownership token."""
     now = datetime.now(timezone.utc)
 
-    # Move expired events that exhausted their retry budget to failed.
-    exhausted_events = (
+    exhausted = (
         OutboxEvent.query
         .filter(
             OutboxEvent.status == 'processing',
@@ -104,7 +103,7 @@ def _claim_outbox_batch():
         .all()
     )
 
-    for event in exhausted_events:
+    for event in exhausted:
         event.status = 'failed'
         event.locked_until = None
         event.lease_token = None
@@ -118,7 +117,6 @@ def _claim_outbox_batch():
             event.id
         )
 
-    # Find one pending event or one expired lease.
     eligible = or_(
         db.and_(
             OutboxEvent.status == 'pending',
@@ -363,7 +361,6 @@ def _process_outbox_event(outbox_id, lease_token):
     event.lease_token = None
     event.last_error = None
 
-    # Payment, entitlement, and outbox completion commit together.
     _commit_outbox_fulfillment()
     return True
 

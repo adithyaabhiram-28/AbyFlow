@@ -161,14 +161,12 @@ def replay_failed_outbox_event(
                 'Associated billing event not found'
             )
 
-        previous_attempts = event.attempts
-
         audit = OutboxReplayAudit(
             outbox_event_id=event.id,
             stripe_event_id=billing_event.stripe_event_id,
             operator_user_id=operator_user_id,
             reason=reason,
-            previous_attempts=previous_attempts,
+            previous_attempts=event.attempts,
         )
 
         db.session.add(audit)

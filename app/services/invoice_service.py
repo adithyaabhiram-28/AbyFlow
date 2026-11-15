@@ -16,10 +16,6 @@ from app.models import (
 )
 
 
-# ============================================================
-# Exceptions
-# ============================================================
-
 class InvoiceError(Exception):
     """Base exception for invoice operations."""
 
@@ -43,10 +39,6 @@ class InvoiceStateError(InvoiceError):
 class InvoiceNumberingError(InvoiceError):
     """Invoice number allocation failed."""
 
-
-# ============================================================
-# Constants
-# ============================================================
 
 CENT = Decimal("0.01")
 THREE_DECIMALS = Decimal("0.001")
@@ -81,10 +73,6 @@ ALLOWED_STATUSES = {
     "cancelled",
 }
 
-
-# ============================================================
-# Validation helpers
-# ============================================================
 
 def _parse_decimal(value, field, scale):
     """Convert and validate decimal input safely."""
@@ -325,10 +313,6 @@ def _normalize_items(items):
     return normalized_items
 
 
-# ============================================================
-# Invoice calculations
-# ============================================================
-
 def _calculate_totals(items, tax_rate):
     """Calculate invoice totals using Decimal arithmetic."""
 
@@ -398,10 +382,6 @@ def calculate_invoice_totals(items, tax_rate=ZERO):
     )
 
 
-# ============================================================
-# Invoice numbering
-# ============================================================
-
 def _allocate_invoice_number(tenant_id):
     """
     Atomically allocate a tenant-specific invoice number.
@@ -454,10 +434,6 @@ def _allocate_invoice_number(tenant_id):
     return f"INV-{allocated_number:06d}"
 
 
-# ============================================================
-# Database transaction helper
-# ============================================================
-
 def _commit_invoice_changes():
     try:
         db.session.commit()
@@ -466,10 +442,6 @@ def _commit_invoice_changes():
         db.session.rollback()
         raise
 
-
-# ============================================================
-# Invoice creation
-# ============================================================
 
 def create_invoice(tenant_id, data):
     """Create a draft invoice inside a tenant."""
@@ -501,7 +473,6 @@ def create_invoice(tenant_id, data):
                 f"Missing fields: {', '.join(sorted(missing))}"
             )
 
-        # Validate everything before allocating an invoice number.
         customer = _validate_customer(
             tenant_id,
             data["customer_id"],
@@ -541,7 +512,6 @@ def create_invoice(tenant_id, data):
             tax_rate,
         )
 
-        # Allocate the invoice number within this transaction.
         invoice_number = _allocate_invoice_number(
             tenant_id
         )
@@ -569,7 +539,6 @@ def create_invoice(tenant_id, data):
         db.session.add(invoice)
         db.session.flush()
 
-        # Commit invoice, items, and sequence allocation together.
         invoice_id = invoice.id
         _commit_invoice_changes()
 
@@ -582,10 +551,6 @@ def create_invoice(tenant_id, data):
         db.session.rollback()
         raise
 
-
-# ============================================================
-# Invoice retrieval
-# ============================================================
 
 def _get_invoice_for_update(tenant_id, invoice_id):
     """Retrieve a tenant-scoped invoice while locking its row where supported."""
@@ -720,10 +685,6 @@ def list_invoices(
     }
 
 
-# ============================================================
-# Invoice updates
-# ============================================================
-
 def update_invoice(tenant_id, invoice_id, data):
     """Update a draft invoice only, with row-level locking where supported."""
 
@@ -832,10 +793,6 @@ def update_invoice(tenant_id, invoice_id, data):
         raise
 
 
-# ============================================================
-# Invoice deletion
-# ============================================================
-
 def delete_invoice(tenant_id, invoice_id):
     """Delete a draft invoice only, with row-level locking where supported."""
 
@@ -857,10 +814,6 @@ def delete_invoice(tenant_id, invoice_id):
         db.session.rollback()
         raise
 
-
-# ============================================================
-# Invoice issuance
-# ============================================================
 
 def issue_invoice(tenant_id, invoice_id):
     """Transition a draft invoice to issued with row-level locking."""

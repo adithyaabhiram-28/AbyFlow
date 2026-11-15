@@ -12,7 +12,6 @@ from app.services.tenant_service import (
     update_tenant_member_role,
     remove_tenant_member,
     TenantValidationError,
-    TenantNotFoundError,
     TenantMemberNotFoundError,
     TenantConflictError,
 )

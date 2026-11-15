@@ -30,13 +30,13 @@ class Config:
     # Application Base URL
     APP_BASE_URL = os.getenv('APP_BASE_URL', 'http://localhost:5000')
 
-    # OpenAI & AI Assistant
-    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-    AI_MODEL = os.getenv('AI_MODEL', 'gpt-4o-mini')
+    # Google Gemini AI Assistant
+    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+    AI_MODEL = os.getenv('AI_MODEL', 'gemini-3.8-flash')
     AI_MAX_TOKENS = int(os.getenv('AI_MAX_TOKENS', '1024'))
     AI_TEMPERATURE = float(os.getenv('AI_TEMPERATURE', '0.0'))
     AI_REQUEST_TIMEOUT = float(os.getenv('AI_REQUEST_TIMEOUT', '15.0'))
-    AI_EMBEDDING_MODEL = os.getenv('AI_EMBEDDING_MODEL', 'text-embedding-3-small')
+    AI_EMBEDDING_MODEL = os.getenv('AI_EMBEDDING_MODEL', 'gemini-embedding-001')
     AI_ALLOW_MOCK_EMBEDDINGS = os.getenv(
         'AI_ALLOW_MOCK_EMBEDDINGS', 'false'
     ).lower() == 'true'
@@ -60,12 +60,12 @@ class TestingConfig(Config):
     STRIPE_SECRET_KEY = 'sk_test_dummy_key_for_testing'
     STRIPE_WEBHOOK_SECRET = 'whsec_dummy_secret_for_testing'
     APP_BASE_URL = 'http://localhost:5000'
-    OPENAI_API_KEY = 'test-mock-openai-key'
-    AI_MODEL = 'gpt-4o-mini'
+    GEMINI_API_KEY = 'test-mock-gemini-key'
+    AI_MODEL = 'gemini-3.8-flash'
     AI_MAX_TOKENS = 1024
     AI_TEMPERATURE = 0.0
     AI_REQUEST_TIMEOUT = 5.0
-    AI_EMBEDDING_MODEL = 'text-embedding-3-small'
+    AI_EMBEDDING_MODEL = 'gemini-embedding-001'
     AI_ALLOW_MOCK_EMBEDDINGS = True
 
 
@@ -84,20 +84,23 @@ class ProductionConfig(Config):
             'STRIPE_WEBHOOK_SECRET',
             'REDIS_URL',
             'APP_BASE_URL',
-            'OPENAI_API_KEY'
+            'GEMINI_API_KEY'
         ]
         missing = [var for var in required_vars if not os.getenv(var)]
         if missing:
             raise ValueError(f"Missing required production environment variables: {', '.join(missing)}")
 
-        api_key = os.getenv('OPENAI_API_KEY', '').strip()
+        if os.getenv('AI_ALLOW_MOCK_EMBEDDINGS', 'false').lower() == 'true':
+            raise ValueError('AI_ALLOW_MOCK_EMBEDDINGS must be false in production.')
+
+        api_key = os.getenv('GEMINI_API_KEY', '').strip()
         if (
             not api_key
             or api_key.startswith('test-')
-            or api_key == 'sk-test-dummy'
             or api_key == 'mock-key-for-testing'
+            or api_key == 'test-gemini-key'
         ):
-            raise ValueError('A real OPENAI_API_KEY is required in production.')
+            raise ValueError('A real GEMINI_API_KEY is required in production.')
 
 
 config_by_name = {

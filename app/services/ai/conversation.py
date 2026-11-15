@@ -68,8 +68,7 @@ def get_conversation_history(
     limit: int = 15
 ) -> List[Dict[str, Any]]:
     """
-    Retrieve conversation history and reconstruct OpenAI-compatible
-    assistant tool-call messages.
+    Retrieve conversation history and reconstruct provider-neutral tool-call messages.
     """
     limit = max(1, min(int(limit or 15), 100))
     # Select the newest N messages, then restore chronological order for the LLM.
@@ -101,7 +100,8 @@ def get_conversation_history(
                             tc.get('arguments', {}),
                             separators=(',', ':')
                         )
-                    }
+                    },
+                    **({'provider_content': tc['provider_content']} if tc.get('provider_content') else {})
                 }
                 for tc in m.tool_arguments
             ]

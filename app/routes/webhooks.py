@@ -116,9 +116,7 @@ def handle_stripe_webhook():
         )
         return jsonify({"error": "Invalid event metadata"}), 400
 
-    # Preserve historical idempotency behavior.
-    # Events already recorded by the previous webhook implementation
-    # must not be processed again.
+    # Idempotency check: ignore already processed events
     existing_event = ProcessedEvent.query.filter_by(
         stripe_event_id=stripe_event_id
     ).first()
@@ -134,7 +132,6 @@ def handle_stripe_webhook():
         }), 200
 
     try:
-        # Persist all three records in one atomic transaction.
         processed_event = ProcessedEvent(
             stripe_event_id=stripe_event_id
         )
@@ -159,14 +156,6 @@ def handle_stripe_webhook():
 
     except IntegrityError:
         db.session.rollback()
-
-        # logger.warning(
-        #     "WEBHOOK DIAGNOSTIC: event_id=%s existing=%s",
-        #     stripe_event_id,
-        #     ProcessedEvent.query.filter_by(
-        #         stripe_event_id=stripe_event_id
-        #     ).count()
-        # )
 
         # A concurrent request may have persisted this event first.
         # Only acknowledge it as a duplicate if the marker exists.
