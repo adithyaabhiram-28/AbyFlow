@@ -1,9 +1,36 @@
+# Secrets and local environment
 .env
-venv
-.venv
-__pycache__
-*.pyc
-.git
+.env.*
+!.env.example
+
+# Python environments and bytecode
+venv/
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Version control and editor state
+.git/
 .gitignore
-.idea
-.vscode
+.idea/
+.vscode/
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Local databases and generated archives
+*.db
+*.sqlite
+*.sqlite3
+*.zip
+
+# OS files
+.DS_Store
+Thumbs.db

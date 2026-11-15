@@ -5,3 +5,21 @@ instance/
 .env
 *.db
 *.pyc
+# Local review archive
+AbyFlow.zip
+backups/
+
+# Local environment variants (keep the safe template)
+.env.*
+!.env.example
+
+# Test and coverage output
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Editor and operating-system metadata
+.DS_Store
+Thumbs.db

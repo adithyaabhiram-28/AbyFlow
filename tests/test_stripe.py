@@ -1,8 +1,15 @@
+from sqlalchemy.exc import IntegrityError
+from uuid import uuid4
 import json
 import time
 from unittest.mock import patch, MagicMock
 import stripe
-from app.models import User, ProcessedEvent
+from app.models import (
+    User,
+    ProcessedEvent,
+    BillingEvent,
+    OutboxEvent,
+)
 
 
 def generate_mock_stripe_signature(payload_bytes: bytes, secret: str) -> str:
@@ -133,7 +140,7 @@ def test_webhook_missing_metadata_email(client, app):
 
 
 def test_webhook_checkout_session_completed_success(client, app, db):
-    """Valid checkout.session.completed dispatches Celery task and records ProcessedEvent."""
+    """Successful webhook atomically persists event and outbox records."""
     secret = app.config['STRIPE_WEBHOOK_SECRET']
     event_id = "evt_valid_checkout_123"
     user_email = "buyer@example.com"
@@ -148,28 +155,48 @@ def test_webhook_checkout_session_completed_success(client, app, db):
             }
         }
     }
+
     payload_bytes = json.dumps(payload_dict).encode('utf-8')
     sig = generate_mock_stripe_signature(payload_bytes, secret)
 
-    with patch('app.routes.webhooks.process_payment_task.delay') as mock_task:
-        res = client.post('/api/webhooks/stripe', data=payload_bytes, headers={'Stripe-Signature': sig})
-        assert res.status_code == 200
-        assert res.get_json()['received'] is True
-        mock_task.assert_called_once_with(user_email)
+    res = client.post(
+        '/api/webhooks/stripe',
+        data=payload_bytes,
+        headers={'Stripe-Signature': sig}
+    )
 
-    # Verify event ID recorded in database
+    assert res.status_code == 200
+    assert res.get_json()['received'] is True
+    assert res.get_json()['status'] == 'queued'
+
     with app.app_context():
-        recorded = ProcessedEvent.query.filter_by(stripe_event_id=event_id).first()
-        assert recorded is not None
+        processed = ProcessedEvent.query.filter_by(
+            stripe_event_id=event_id
+        ).first()
+
+        billing = BillingEvent.query.filter_by(
+            stripe_event_id=event_id
+        ).first()
+
+        assert processed is not None
+        assert billing is not None
+        assert billing.event_type == 'checkout.session.completed'
+        assert billing.payload['id'] == event_id
+
+        outbox = OutboxEvent.query.filter_by(
+            billing_event_id=billing.id
+        ).first()
+
+        assert outbox is not None
+        assert outbox.status == 'pending'
+        assert outbox.attempts == 0
 
 
 def test_webhook_duplicate_event_id(client, app, db):
-    """Duplicate webhook event is acknowledged without re-dispatching task."""
+    """Duplicate Stripe events are acknowledged without creating another outbox record."""
     secret = app.config['STRIPE_WEBHOOK_SECRET']
     event_id = "evt_duplicate_test_456"
-    user_email = "buyer@example.com"
 
-    # Pre-record event in database
     with app.app_context():
         db.session.add(ProcessedEvent(stripe_event_id=event_id))
         db.session.commit()
@@ -180,30 +207,42 @@ def test_webhook_duplicate_event_id(client, app, db):
         "type": "checkout.session.completed",
         "data": {
             "object": {
-                "metadata": {"user_email": user_email}
+                "metadata": {"user_email": "buyer@example.com"}
             }
         }
     }
+
     payload_bytes = json.dumps(payload_dict).encode('utf-8')
     sig = generate_mock_stripe_signature(payload_bytes, secret)
 
-    with patch('app.routes.webhooks.process_payment_task.delay') as mock_task:
-        res = client.post('/api/webhooks/stripe', data=payload_bytes, headers={'Stripe-Signature': sig})
-        assert res.status_code == 200
-        data = res.get_json()
-        assert data['received'] is True
-        assert data.get('message') == 'Event already processed'
-        assert not mock_task.called
+    res = client.post(
+        '/api/webhooks/stripe',
+        data=payload_bytes,
+        headers={'Stripe-Signature': sig}
+    )
+
+    assert res.status_code == 200
+    assert res.get_json()['received'] is True
+    assert res.get_json()['message'] == 'Event already received'
+
+    with app.app_context():
+        assert BillingEvent.query.filter_by(
+            stripe_event_id=event_id
+        ).count() == 0
+
+        assert OutboxEvent.query.count() == 0
 
 
 def test_webhook_invoice_payment_failed(client, app, db, registered_user):
-    """invoice.payment_failed downgrades user to free plan."""
+    """Payment failure is persisted for asynchronous processing, not downgraded inline."""
     secret = app.config['STRIPE_WEBHOOK_SECRET']
     event_id = "evt_payment_failed_789"
 
-    # Set user to pro first
     with app.app_context():
-        user = User.query.filter_by(email=registered_user.email).first()
+        user = User.query.filter_by(
+            email=registered_user.email
+        ).first()
+
         user.plan_tier = 'pro'
         db.session.commit()
 
@@ -217,14 +256,251 @@ def test_webhook_invoice_payment_failed(client, app, db, registered_user):
             }
         }
     }
+
     payload_bytes = json.dumps(payload_dict).encode('utf-8')
     sig = generate_mock_stripe_signature(payload_bytes, secret)
 
-    res = client.post('/api/webhooks/stripe', data=payload_bytes, headers={'Stripe-Signature': sig})
+    res = client.post(
+        '/api/webhooks/stripe',
+        data=payload_bytes,
+        headers={'Stripe-Signature': sig}
+    )
+
     assert res.status_code == 200
     assert res.get_json()['received'] is True
+    assert res.get_json()['status'] == 'queued'
 
-    # Verify user downgraded
     with app.app_context():
-        user = User.query.filter_by(email=registered_user.email).first()
-        assert user.plan_tier == 'free'
+        user = User.query.filter_by(
+            email=registered_user.email
+        ).first()
+
+        assert user.plan_tier == 'pro'
+
+        billing = BillingEvent.query.filter_by(
+            stripe_event_id=event_id
+        ).first()
+
+        assert billing is not None
+        assert billing.event_type == 'invoice.payment_failed'
+
+        outbox = OutboxEvent.query.filter_by(
+            billing_event_id=billing.id
+        ).first()
+
+        assert outbox is not None
+        assert outbox.status == 'pending'
+
+
+def test_webhook_repeated_delivery_is_idempotent(
+    client, app, db, registered_user
+):
+    """Delivering the same Stripe event twice creates only one record set."""
+    secret = app.config['STRIPE_WEBHOOK_SECRET']
+    event_id = "evt_repeated_delivery_123"
+
+    payload_dict = {
+        "id": event_id,
+        "object": "event",
+        "type": "checkout.session.completed",
+        "data": {
+            "object": {
+                "metadata": {
+                    "user_email": registered_user.email
+                }
+            }
+        }
+    }
+
+    payload_bytes = json.dumps(payload_dict).encode("utf-8")
+    signature = generate_mock_stripe_signature(payload_bytes, secret)
+
+    headers = {"Stripe-Signature": signature}
+
+    first_response = client.post(
+        "/api/webhooks/stripe",
+        data=payload_bytes,
+        headers=headers,
+    )
+
+    second_response = client.post(
+        "/api/webhooks/stripe",
+        data=payload_bytes,
+        headers=headers,
+    )
+
+    assert first_response.status_code == 200
+    assert first_response.get_json()["status"] == "queued"
+
+    assert second_response.status_code == 200
+    assert second_response.get_json()["message"] == "Event already received"
+
+    with app.app_context():
+        assert ProcessedEvent.query.filter_by(
+            stripe_event_id=event_id
+        ).count() == 1
+
+        assert BillingEvent.query.filter_by(
+            stripe_event_id=event_id
+        ).count() == 1
+
+        billing = BillingEvent.query.filter_by(
+            stripe_event_id=event_id
+        ).one()
+
+        assert OutboxEvent.query.filter_by(
+            billing_event_id=billing.id
+        ).count() == 1
+
+
+def test_webhook_database_failure_rolls_back_all_records(
+    client, app, db, registered_user, monkeypatch
+):
+    """A failed database commit must not leave partial webhook records."""
+    secret = app.config['STRIPE_WEBHOOK_SECRET']
+    event_id = "evt_database_failure_123"
+
+    payload_dict = {
+        "id": event_id,
+        "object": "event",
+        "type": "checkout.session.completed",
+        "data": {
+            "object": {
+                "metadata": {
+                    "user_email": registered_user.email
+                }
+            }
+        }
+    }
+
+    payload_bytes = json.dumps(payload_dict).encode("utf-8")
+    signature = generate_mock_stripe_signature(payload_bytes, secret)
+
+    def fail_commit():
+        raise RuntimeError("Simulated database commit failure")
+    assert ProcessedEvent.query.filter_by(
+        stripe_event_id=event_id
+    ).first() is None
+    monkeypatch.setattr(db.session, "commit", fail_commit)
+
+    response = client.post(
+        "/api/webhooks/stripe",
+        data=payload_bytes,
+        headers={"Stripe-Signature": signature},
+    )
+
+    assert response.status_code == 500
+    assert response.get_json()["error"] == "Internal database error"
+
+    with app.app_context():
+        assert ProcessedEvent.query.filter_by(
+            stripe_event_id=event_id
+        ).count() == 0
+
+        assert BillingEvent.query.filter_by(
+            stripe_event_id=event_id
+        ).count() == 0
+
+        assert OutboxEvent.query.count() == 0
+
+
+
+def test_webhook_invoice_payment_failed_without_email(
+    client, app, db
+):
+    """Payment failure events can be persisted without a user email."""
+    secret = app.config["STRIPE_WEBHOOK_SECRET"]
+    event_id = "evt_payment_failed_no_email_123"
+
+    payload_dict = {
+        "id": event_id,
+        "object": "event",
+        "type": "invoice.payment_failed",
+        "data": {
+            "object": {
+                "id": "in_test_invoice_123",
+                "object": "invoice",
+            }
+        },
+    }
+
+    payload_bytes = json.dumps(payload_dict).encode("utf-8")
+    signature = generate_mock_stripe_signature(payload_bytes, secret)
+
+    response = client.post(
+        "/api/webhooks/stripe",
+        data=payload_bytes,
+        headers={"Stripe-Signature": signature},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "queued"
+
+    with app.app_context():
+        billing = BillingEvent.query.filter_by(
+            stripe_event_id=event_id
+        ).one()
+
+        assert billing.event_type == "invoice.payment_failed"
+
+        outbox = OutboxEvent.query.filter_by(
+            billing_event_id=billing.id
+        ).one()
+
+        assert outbox.status == "pending"
+
+
+def test_webhook_unrelated_integrity_error_returns_500(
+    client, app, db, registered_user, monkeypatch
+):
+    """Unrelated integrity errors must not be acknowledged as duplicates."""
+    secret = app.config['STRIPE_WEBHOOK_SECRET']
+    event_id = f"evt_unrelated_integrity_error_{uuid4().hex}"
+
+    payload_dict = {
+        "id": event_id,
+        "object": "event",
+        "type": "checkout.session.completed",
+        "data": {
+            "object": {
+                "metadata": {
+                    "user_email": registered_user.email
+                }
+            }
+        }
+    }
+
+    payload_bytes = json.dumps(payload_dict).encode("utf-8")
+    signature = generate_mock_stripe_signature(payload_bytes, secret)
+
+    def fail_commit():
+        raise IntegrityError(
+            "Simulated unrelated constraint violation",
+            {},
+            Exception("constraint violation")
+        )
+    db.session.remove()
+
+    with app.app_context():
+        assert ProcessedEvent.query.filter_by(
+            stripe_event_id=event_id
+        ).first() is None
+    monkeypatch.setattr(db.session, "commit", fail_commit)
+
+    response = client.post(
+        "/api/webhooks/stripe",
+        data=payload_bytes,
+        headers={"Stripe-Signature": signature}
+    )
+
+    assert response.status_code == 500
+    assert response.get_json()["error"] == "Internal database error"
+
+    with app.app_context():
+        assert ProcessedEvent.query.filter_by(
+            stripe_event_id=event_id
+        ).count() == 0
+
+        assert BillingEvent.query.filter_by(
+            stripe_event_id=event_id
+        ).count() == 0

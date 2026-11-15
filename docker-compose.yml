@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-abyflow_user}
@@ -40,6 +40,13 @@ services:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - APP_BASE_URL=${APP_BASE_URL:-http://localhost:5000}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AI_MODEL=${AI_MODEL:-gpt-4o-mini}
+      - AI_MAX_TOKENS=${AI_MAX_TOKENS:-1024}
+      - AI_TEMPERATURE=${AI_TEMPERATURE:-0.0}
+      - AI_REQUEST_TIMEOUT=${AI_REQUEST_TIMEOUT:-15.0}
+      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - AI_ALLOW_MOCK_EMBEDDINGS=${AI_ALLOW_MOCK_EMBEDDINGS:-false}
     depends_on:
       db:
         condition: service_healthy
@@ -50,7 +57,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: celery -A app.tasks.celery worker --loglevel=info -c 2
+    command: celery -A app.tasks.celery worker --beat --loglevel=info -c 2
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
@@ -67,6 +74,13 @@ services:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - APP_BASE_URL=${APP_BASE_URL:-http://localhost:5000}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AI_MODEL=${AI_MODEL:-gpt-4o-mini}
+      - AI_MAX_TOKENS=${AI_MAX_TOKENS:-1024}
+      - AI_TEMPERATURE=${AI_TEMPERATURE:-0.0}
+      - AI_REQUEST_TIMEOUT=${AI_REQUEST_TIMEOUT:-15.0}
+      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - AI_ALLOW_MOCK_EMBEDDINGS=${AI_ALLOW_MOCK_EMBEDDINGS:-false}
     depends_on:
       db:
         condition: service_healthy

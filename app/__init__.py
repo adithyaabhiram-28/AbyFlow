@@ -3,15 +3,15 @@ import logging
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template
 from werkzeug.middleware.proxy_fix import ProxyFix
-from sqlalchemy import text
+from sqlalchemy import event, text
 import redis
-
-from app.config import config_by_name, ProductionConfig
-from app.extensions import db, bcrypt, jwt
 
 # Load environment variables from .env if present
 if not os.getenv('DOCKER_ENV'):
     load_dotenv()
+
+from app.config import config_by_name, ProductionConfig
+from app.extensions import db, bcrypt, jwt, migrate
 
 # Configure logging
 logging.basicConfig(
@@ -35,6 +35,7 @@ def create_app(config_name=None, test_config=None):
 
     config_class = config_by_name.get(config_name, config_by_name['default'])
     app.config.from_object(config_class)
+    app.config['APP_ENV'] = config_name
 
     # Apply test or explicit override configuration if provided
     if test_config:
@@ -49,8 +50,24 @@ def create_app(config_name=None, test_config=None):
 
     # Initialize extensions
     db.init_app(app)
+    # Enable SQLite foreign-key enforcement on every connection.
+    with app.app_context():
+        if db.engine.dialect.name == 'sqlite':
+
+            @event.listens_for(db.engine, 'connect')
+            def enable_sqlite_foreign_keys(
+                dbapi_connection,
+                connection_record
+            ):
+                cursor = dbapi_connection.cursor()
+                cursor.execute('PRAGMA foreign_keys=ON')
+                cursor.close()
     bcrypt.init_app(app)
     jwt.init_app(app)
+    migrate.init_app(app, db)
+
+
+    from app import models
 
     # Health check endpoint
     @app.route('/health', methods=['GET'])
@@ -93,9 +110,19 @@ def create_app(config_name=None, test_config=None):
     from app.routes.auth import auth_bp
     from app.routes.subscriptions import sub_bp
     from app.routes.webhooks import webhook_bp
+    from app.routes.tenants import tenant_bp
+    from app.routes.customers import customer_bp
+    from app.routes.invoices import invoice_bp
+    from app.routes.operations import operations_bp
+    from app.routes.ai import ai_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(sub_bp, url_prefix='/api/subscriptions')
     app.register_blueprint(webhook_bp, url_prefix='/api/webhooks')
+    app.register_blueprint(tenant_bp, url_prefix='/api/tenants')
+    app.register_blueprint(customer_bp, url_prefix='/api/customers')
+    app.register_blueprint(invoice_bp, url_prefix='/api/invoices')
+    app.register_blueprint(operations_bp, url_prefix='/api/ops')
+    app.register_blueprint(ai_bp, url_prefix='/api/ai')
 
     return app
