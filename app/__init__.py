@@ -35,6 +35,7 @@ def create_app(config_name=None, test_config=None):
 
     config_class = config_by_name.get(config_name, config_by_name['default'])
     app.config.from_object(config_class)
+    app.config['APP_ENV'] = config_name
 
     # Apply test or explicit override configuration if provided
     if test_config:
@@ -112,6 +113,8 @@ def create_app(config_name=None, test_config=None):
     from app.routes.tenants import tenant_bp
     from app.routes.customers import customer_bp
     from app.routes.invoices import invoice_bp
+    from app.routes.operations import operations_bp
+    from app.routes.ai import ai_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(sub_bp, url_prefix='/api/subscriptions')
@@ -119,5 +122,7 @@ def create_app(config_name=None, test_config=None):
     app.register_blueprint(tenant_bp, url_prefix='/api/tenants')
     app.register_blueprint(customer_bp, url_prefix='/api/customers')
     app.register_blueprint(invoice_bp, url_prefix='/api/invoices')
+    app.register_blueprint(operations_bp, url_prefix='/api/ops')
+    app.register_blueprint(ai_bp, url_prefix='/api/ai')
 
     return app

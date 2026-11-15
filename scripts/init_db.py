@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-"""Database initialization script for AbyFlow."""
-import sys
+"""Apply the project's Alembic migrations to the configured database."""
 import os
+import sys
 
-# Add root directory to path
+# Ensure the project root is importable when invoked as a script.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app import create_app
-from app.extensions import db
-from app.models import User, ProcessedEvent
+from flask_migrate import upgrade
 
 
 def init_db():
     app = create_app()
     with app.app_context():
-        print("Ensuring database tables exist...")
-        db.create_all()
-        print("Database initialized successfully.")
+        upgrade(directory=os.path.join(os.path.dirname(__file__), '..', 'migrations'))
+        print("Database migrations applied successfully.")
 
 
 if __name__ == '__main__':

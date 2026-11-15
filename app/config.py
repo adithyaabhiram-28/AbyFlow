@@ -6,6 +6,7 @@ basedir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
 class Config:
     """Base configuration."""
+    APP_ENV = os.getenv('APP_ENV', 'development')
     SECRET_KEY = os.getenv('SECRET_KEY', os.getenv('JWT_SECRET_KEY', 'abyflow-dev-secret-key'))
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
@@ -29,6 +30,16 @@ class Config:
     # Application Base URL
     APP_BASE_URL = os.getenv('APP_BASE_URL', 'http://localhost:5000')
 
+    # OpenAI & AI Assistant
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+    AI_MODEL = os.getenv('AI_MODEL', 'gpt-4o-mini')
+    AI_MAX_TOKENS = int(os.getenv('AI_MAX_TOKENS', '1024'))
+    AI_TEMPERATURE = float(os.getenv('AI_TEMPERATURE', '0.0'))
+    AI_REQUEST_TIMEOUT = float(os.getenv('AI_REQUEST_TIMEOUT', '15.0'))
+    AI_EMBEDDING_MODEL = os.getenv('AI_EMBEDDING_MODEL', 'text-embedding-3-small')
+    AI_ALLOW_MOCK_EMBEDDINGS = os.getenv(
+        'AI_ALLOW_MOCK_EMBEDDINGS', 'false'
+    ).lower() == 'true'
 
 class DevelopmentConfig(Config):
     """Development configuration."""
@@ -49,10 +60,18 @@ class TestingConfig(Config):
     STRIPE_SECRET_KEY = 'sk_test_dummy_key_for_testing'
     STRIPE_WEBHOOK_SECRET = 'whsec_dummy_secret_for_testing'
     APP_BASE_URL = 'http://localhost:5000'
+    OPENAI_API_KEY = 'test-mock-openai-key'
+    AI_MODEL = 'gpt-4o-mini'
+    AI_MAX_TOKENS = 1024
+    AI_TEMPERATURE = 0.0
+    AI_REQUEST_TIMEOUT = 5.0
+    AI_EMBEDDING_MODEL = 'text-embedding-3-small'
+    AI_ALLOW_MOCK_EMBEDDINGS = True
 
 
 class ProductionConfig(Config):
     """Production configuration enforcing required environment variables."""
+    APP_ENV = 'production'
     DEBUG = False
     TESTING = False
     
@@ -64,11 +83,21 @@ class ProductionConfig(Config):
             'STRIPE_SECRET_KEY',
             'STRIPE_WEBHOOK_SECRET',
             'REDIS_URL',
-            'APP_BASE_URL'
+            'APP_BASE_URL',
+            'OPENAI_API_KEY'
         ]
         missing = [var for var in required_vars if not os.getenv(var)]
         if missing:
             raise ValueError(f"Missing required production environment variables: {', '.join(missing)}")
+
+        api_key = os.getenv('OPENAI_API_KEY', '').strip()
+        if (
+            not api_key
+            or api_key.startswith('test-')
+            or api_key == 'sk-test-dummy'
+            or api_key == 'mock-key-for-testing'
+        ):
+            raise ValueError('A real OPENAI_API_KEY is required in production.')
 
 
 config_by_name = {

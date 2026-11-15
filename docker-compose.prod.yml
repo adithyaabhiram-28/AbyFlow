@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -44,6 +44,13 @@ services:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - APP_BASE_URL=${APP_BASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-gpt-4o-mini}
+      - AI_MAX_TOKENS=${AI_MAX_TOKENS:-1024}
+      - AI_TEMPERATURE=${AI_TEMPERATURE:-0.0}
+      - AI_REQUEST_TIMEOUT=${AI_REQUEST_TIMEOUT:-15.0}
+      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - AI_ALLOW_MOCK_EMBEDDINGS=false
     depends_on:
       db:
         condition: service_healthy
@@ -73,6 +80,43 @@ services:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - APP_BASE_URL=${APP_BASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-gpt-4o-mini}
+      - AI_MAX_TOKENS=${AI_MAX_TOKENS:-1024}
+      - AI_TEMPERATURE=${AI_TEMPERATURE:-0.0}
+      - AI_REQUEST_TIMEOUT=${AI_REQUEST_TIMEOUT:-15.0}
+      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - AI_ALLOW_MOCK_EMBEDDINGS=false
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - abyflow_network
+
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A app.tasks.celery beat --loglevel=info
+    restart: always
+    environment:
+      - DOCKER_ENV=true
+      - FLASK_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - APP_BASE_URL=${APP_BASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-gpt-4o-mini}
+      - AI_MAX_TOKENS=${AI_MAX_TOKENS:-1024}
+      - AI_TEMPERATURE=${AI_TEMPERATURE:-0.0}
+      - AI_REQUEST_TIMEOUT=${AI_REQUEST_TIMEOUT:-15.0}
+      - AI_EMBEDDING_MODEL=${AI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - AI_ALLOW_MOCK_EMBEDDINGS=false
     depends_on:
       db:
         condition: service_healthy

@@ -1,0 +1,5 @@
+# Install runtime dependencies plus local development/test tools:
+-r requirements.txt
+
+# Test coverage reporting
+pytest-cov==7.1.0

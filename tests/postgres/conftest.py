@@ -14,6 +14,7 @@ from app.models import (
     TenantMembership,
     Customer,
     Invoice,
+    Payment,
 )
 
 
@@ -31,7 +32,7 @@ def postgres_app():
     # Hard safety guard: never run these tests against another database.
     if (
         url.database != "abyflow_concurrency_test"
-        or url.host not in ("localhost", "127.0.0.1")
+        or url.host not in ("localhost", "127.0.0.1", "db")
         or url.drivername != "postgresql+psycopg2"
     ):
         pytest.fail("Refusing to run against an unexpected database")
@@ -49,7 +50,11 @@ def postgres_app():
             text("SELECT version_num FROM alembic_version")
         ).scalar_one()
 
-        if revision != "b535855fde14":
+        if revision not in (
+            "932ed677e876",
+            "a1e4c83d7f90",
+            "085c6d66f1a4",
+        ):
             pytest.fail(
                 f"Unexpected PostgreSQL migration revision: {revision}"
             )
@@ -100,6 +105,7 @@ def postgres_workspace(postgres_app):
         db.session.commit()
 
         workspace = {
+            "user_id": user.id,
             "tenant_id": tenant.id,
             "customer_id": customer.id,
         }
@@ -135,6 +141,12 @@ def postgres_workspace(postgres_app):
         db.session.execute(
             delete(Tenant).where(
                 Tenant.id == tenant.id
+            )
+        )
+
+        db.session.execute(
+            delete(Payment).where(
+                Payment.user_id == user.id
             )
         )
 

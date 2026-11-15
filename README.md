@@ -1,39 +1,104 @@
 # AbyFlow API
 
-[![Tests](https://img.shields.io/badge/tests-32%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-automated-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/flask-3.1.3-black.svg)](https://flask.palletsprojects.com/)
+[![PostgreSQL](https://img.shields.io/badge/postgresql-15%20%7C%20pgvector-blue.svg)](https://www.postgresql.org/)
+[![Celery](https://img.shields.io/badge/celery-5.6.3-green.svg)](https://docs.celeryq.dev/)
 [![Docker](https://img.shields.io/badge/docker-compose-blue.svg)](https://www.docker.com/)
 
-**AbyFlow** is a resilient, asynchronous SaaS payment and user billing backend built with Flask, Celery, Redis, and PostgreSQL. It is designed to handle high-throughput Stripe payment webhooks with atomic idempotency and non-blocking background task execution.
+**AbyFlow** is a resilient, enterprise-grade SaaS billing, multi-tenant workspace management, and AI intelligence backend built with Flask, SQLAlchemy, Celery, Redis, PostgreSQL, and Stripe.
 
-> **Note on Payment Model:** AbyFlow currently implements **one-time payments** (`mode='payment'`) via Stripe Checkout for lifetime/fixed-tier access upgrades ($20.00 USD). It is technically structured to allow seamless extension to recurring subscriptions in future versions.
+It features a high-throughput **Transactional Outbox** pattern with deterministic row locking (`SKIP LOCKED`), fencing tokens, and exponential backoff; strict database-level **Multi-Tenant Isolation**; exact **Deterministic Financial Calculations** (integer cents and `Decimal`); and a **Tenant-Aware Retrieval-Augmented Generation (RAG) AI Assistant** with read-only database tool calling.
+
+> **Note on Payment Model:** AbyFlow currently implements **one-time payments** (`mode='payment'`) via Stripe Checkout for lifetime/fixed-tier access upgrades ($20.00 USD / 2000 cents). It is structurally architected to support recurring subscriptions in future versions.
 
 ---
 
-## Architecture Overview
+
+
+## Project Summary
+
+**AbyFlow — AI-Powered Billing Intelligence Platform**
+
+A multi-tenant SaaS billing platform combining production-oriented backend engineering with an LLM-powered billing assistant and retrieval-augmented generation (RAG). The AI assistant uses structured, read-only tools to retrieve workspace billing data and tenant-scoped knowledge, while the backend handles authentication, authorization, invoicing, Stripe billing, asynchronous processing, and auditability.
+
+**AI engineering:** LLM integration, function/tool calling, conversation persistence, token-usage tracking, embeddings, document chunking, pgvector retrieval, and tenant-aware RAG.
+
+**Backend engineering:** Flask REST APIs, PostgreSQL, SQLAlchemy, multi-tenancy, JWT authentication, Stripe webhooks, idempotency, transactional outbox, Celery, Redis, Docker, and AWS EC2 deployment.
+
+## High-Level Architecture
 
 ```mermaid
 graph TD
-    Client[Client / Web Browser] -->|HTTP / HTTPS| Nginx[Nginx Reverse Proxy]
+    Client[Client / Web Browser / Mobile] -->|HTTP / HTTPS| Nginx[Nginx Reverse Proxy]
     Nginx -->|Proxy :5000| Gunicorn[Gunicorn WSGI Server]
     Gunicorn --> Flask[Flask REST API Application]
-    
-    Flask -->|CRUD Operations| DB[(PostgreSQL 15)]
-    Flask -->|Create Checkout Session| Stripe[Stripe API]
-    Stripe -->|Signed Webhooks /api/webhooks/stripe| Flask
-    
-    Flask -->|Enqueue Task| Redis[(Redis 7 Queue)]
-    Redis -->|Consume Task| Worker[Celery Worker]
-    Worker -->|Upgrade User Tier to 'pro'| DB
+
+    subgraph "Core Storage & Cache"
+        Flask -->|ORM Queries & Vector Search| DB[(PostgreSQL 15 + pgvector)]
+        Flask -->|Enqueue Outbox Pulse| Redis[(Redis 7 Queue)]
+    end
+
+    subgraph "Stripe Payment Lifecycle"
+        Flask -->|Create Checkout Session| Stripe[Stripe API]
+        Stripe -->|Signed Webhook /api/webhooks/stripe| Flask
+        Flask -->|Atomic Write: ProcessedEvent + OutboxEvent| DB
+    end
+
+    subgraph "Transactional Outbox Engine"
+        Redis -->|Consume Task| Worker[Celery Worker Pool]
+        Worker -->|SELECT ... FOR UPDATE SKIP LOCKED| DB
+        Worker -->|Idempotent Payment & Tier Upgrade| DB
+    end
+
+    subgraph "Platform Operations & Audit"
+        OpsAdmin[Platform Operator / Admin] -->|Audit & Replay /api/ops/outbox/*| Flask
+        Flask -->|Atomic Replay + Audit Trail| DB
+    end
+
+    subgraph "AI Intelligence & RAG"
+        User[Tenant User] -->|POST /api/ai/chat| Flask
+        Flask -->|Semantic Retrieval + Isolation| DB
+        Flask -->|Strict Read-Only Context Tools| DB
+        Flask -->|LLM Completion Prompt| OpenAI[OpenAI GPT-4o-mini]
+    end
 ```
 
-### Component Breakdown
-- **Web Application ([Flask](https://flask.palletsprojects.com/)):** Application factory pattern (`create_app`), modular blueprints for `auth`, `subscriptions`, and `webhooks`, and a comprehensive `/health` monitoring endpoint.
-- **Task Queue ([Celery](https://docs.celeryq.dev/) + [Redis](https://redis.io/)):** Asynchronous payment fulfillment worker with automatic exponential backoff retries on transient failures.
-- **Relational Storage ([PostgreSQL](https://www.postgresql.org/)):** User credential and plan tier storage, alongside a `processed_event` table enforcing database-level unique constraints for webhook idempotency.
-- **Security & Auth:** Bcrypt password hashing, JWT access tokens with configurable expiration, input sanitization, and non-root Docker execution.
-- **Payment Gateway ([Stripe](https://stripe.com/)):** Cryptographic webhook signature verification (`stripe.Webhook.construct_event`) and hosted checkout session creation.
+---
+
+## Core System Capabilities
+
+### 1. Multi-Tenancy & Workspace Governance
+- **Personal Workspace Provisioning:** Atomic creation of personal tenant workspaces upon user registration.
+- **Role Hierarchy:**
+  - **Platform Roles:** `user`, `operator`, `admin` (stored on user record, provisioned via secure host CLI).
+  - **Workspace Roles:** `owner`, `admin`, `member` (stored on tenant memberships).
+- **Tenant Isolation:** Explicit workspace boundaries enforced across queries, invoices, customer entities, and vector retrieval.
+
+### 2. Transactional Outbox & Reliable Stripe Billing
+- **Cryptographic Signature Verification:** Webhooks verified against raw byte payload with replay attack rejection.
+- **Atomic Event Ingestion:** Webhook requests atomically persist `ProcessedEvent`, `BillingEvent`, and `OutboxEvent` before returning HTTP 200.
+- **Worker Concurrency & Fencing:** Workers claim outbox events using `SELECT ... FOR UPDATE SKIP LOCKED`, assigning a cryptographically secure UUID lease token. Stale workers are prevented from updating the database.
+- **Backoff & Dead-Letter Handling:** Exponential backoff scheduling (`10s`, `20s`, `40s`...) up to 5 attempts before marking as `failed`.
+- **Payment Idempotency:** Duplicate checkout events and payment intents are safely deduplicated.
+
+### 3. Operations API & Replay Audit
+- Dedicated platform endpoints (`/api/ops/outbox/*`) restricted to users with `operator` or `admin` platform roles.
+- Operator replay resets retry state atomically, records operator identity, mandatory audit rationale, and previous attempt history.
+- Zero public self-promotion routes. First operator provisioned via `scripts/promote_operator.py`.
+
+### 4. Deterministic Billing & Invoicing
+- **Customer Management:** Full CRUD scoped strictly to active tenant.
+- **Invoice Sequencing:** Atomic per-tenant sequence numbers formatted as `INV-000001` using row-level locking.
+- **Financial Exactness:** All line items, taxes, and totals calculated using integer cents and exact `Decimal` precision. No floating-point inaccuracies.
+- **Immutable Issued State:** Issued invoices cannot be edited or deleted.
+
+### 5. AI Engineering & Tenant-Aware RAG Engine
+- **Tenant-Aware Retrieval:** RAG retrieval applies workspace-aware filtering so tenant queries are scoped to the active workspace.
+- **Dual-Dialect Vector Storage:** `EmbeddingVector` custom SQLAlchemy type seamlessly uses PostgreSQL `pgvector` in production and `JSON` in SQLite test environments.
+- **Deterministic Read-Only Billing Tools:** LLM tool calls execute against audited repository query boundaries; LLMs are strictly forbidden from performing financial computations or mutative actions.
+- **Token Usage Auditing:** Prompt, completion, and total token usage are persisted per interaction, alongside an estimated USD cost. The current pricing table explicitly covers `gpt-4o-mini` and `gpt-4o`; the fallback rate is a baseline estimate for other model names, not verified provider pricing.
 
 ---
 
@@ -42,44 +107,64 @@ graph TD
 ```
 AbyFlow/
 ├── .dockerignore
-├── .env.example                # Template for environment configuration
+├── .env.example                     # Environment configuration template
 ├── .gitignore
-├── Dockerfile                  # Hardened, non-root Python 3.12 container
-├── docker-compose.yml          # Local development stack (internal network isolation)
-├── docker-compose.prod.yml     # Production stack (EC2 deployment ready)
-├── requirements.txt            # Pinned dependencies
-├── wsgi.py                     # Production WSGI application entry point
+├── Dockerfile                       # Hardened, non-root Python 3.12 container
+├── docker-compose.yml               # Local development stack (db, redis, web, worker)
+├── docker-compose.prod.yml          # Production stack (EC2 deployment ready)
+├── requirements.txt                 # Runtime dependencies
+├── requirements-dev.txt             # Test coverage tooling
+├── wsgi.py                          # Production WSGI application entry point
 ├── app/
-│   ├── __init__.py             # Flask application factory with /health check
-│   ├── config.py               # Development, Testing, Production config classes
-│   ├── extensions.py           # Initialized extensions (SQLAlchemy, Bcrypt, JWT)
-│   ├── extentions.py           # Backward-compatibility alias
-│   ├── models.py               # SQLAlchemy models (User, ProcessedEvent)
-│   ├── tasks.py                # Celery app and process_payment_task
+│   ├── __init__.py                  # Application factory with /health check
+│   ├── config.py                    # Environment configuration classes
+│   ├── extensions.py                # Initialized SQLAlchemy, Bcrypt, JWT extensions
+│   ├── extentions.py                # Backward-compatibility alias
+│   ├── models.py                    # Complete domain, billing, outbox, and AI models
+│   ├── tasks.py                     # Celery outbox poller and processor tasks
+│   ├── repositories/
+│   │   └── billing_repository.py    # Read-only tenant-scoped billing queries for AI tools
 │   ├── routes/
-│   │   ├── auth.py             # /register, /login, /dashboard
-│   │   ├── subscriptions.py    # /create-checkout, /success, /cancel
-│   │   └── webhooks.py         # /stripe webhook handler with signature checks
+│   │   ├── ai.py                    # /api/ai/chat, /conversations, /usage
+│   │   ├── auth.py                  # /api/auth/register, /login, /dashboard
+│   │   ├── customers.py             # /api/customers CRUD
+│   │   ├── invoices.py              # /api/invoices CRUD and issue
+│   │   ├── operations.py            # /api/ops/outbox failed inspection and replay
+│   │   ├── subscriptions.py         # /create-checkout, /success, /cancel
+│   │   ├── tenants.py               # Workspace details and membership management
+│   │   └── webhooks.py              # Cryptographic Stripe webhook receiver
 │   ├── schemas/
-│   │   └── stripe_schema.py    # Marshmallow webhook payload validation
+│   │   └── stripe_schema.py         # Webhook payload schemas
 │   └── services/
-│       ├── stripe_service.py   # Stripe checkout session generator
-│       └── user_service.py     # Idempotent tier upgrade/downgrade logic
-├── nginx/
-│   └── abyflow.conf            # Reverse proxy & SSL configuration for EC2
+│       ├── ai/                      # AI assistant, tools, prompts, usage accounting
+│       ├── outbox_operations.py     # Outbox inspection and replay logic
+│       ├── platform_authorization.py# Platform operator/admin decorators
+│       ├── rag/                     # Chunking, embeddings, retrieval, ingestion
+│       ├── stripe_service.py        # Stripe checkout session generator
+│       ├── tenant_service.py        # Multi-tenant workspace and membership operations
+│       └── user_service.py          # Plan tier upgrades
+├── docs/
+│   └── knowledge_base/              # Seed documentation (FAQ, policies, terms)
+├── migrations/                      # Alembic schema migrations
 ├── scripts/
-│   └── init_db.py              # Automated database table initialization
+│   ├── init_db.py                   # Automated database initialization
+│   └── promote_operator.py          # Secure host CLI to grant platform roles
 └── tests/
-    ├── conftest.py             # Isolated in-memory SQLite fixtures
-    ├── test_auth.py            # Authentication & JWT test cases
-    ├── test_health.py          # Health check & root endpoint tests
-    ├── test_services.py        # Service & Celery execution tests
-    └── test_stripe.py          # Stripe checkout & webhook signature test cases
+    ├── conftest.py                  # Isolated SQLite testing fixtures
+    ├── postgres/                    # True PostgreSQL concurrency & locking tests
+    ├── test_ai_layer.py             # AI RAG, tools, and usage tests
+    ├── test_auth.py                 # Auth and multi-tenant isolation tests
+    ├── test_customers.py            # Customer domain tests
+    ├── test_invoices.py             # Invoice calculations and sequence tests
+    ├── test_operations_api.py       # Platform ops replay & audit tests
+    ├── test_outbox.py               # Outbox leasing, backoff, and idempotency tests
+    ├── test_stripe.py               # Stripe checkout & webhook tests
+    └── test_tenant_management.py    # Workspace membership CRUD tests
 ```
 
 ---
 
-## API Endpoints
+## API Endpoints Reference
 
 ### 1. System
 | Method | Endpoint | Description | Auth Required |
@@ -90,239 +175,151 @@ AbyFlow/
 ### 2. Authentication
 | Method | Endpoint | Description | Auth Required |
 |---|---|---|---|
-| `POST` | `/api/auth/register` | Register new user with email & password | No |
+| `POST` | `/api/auth/register` | Register new user + creates personal workspace | No |
 | `POST` | `/api/auth/login` | Authenticate and obtain JWT access token | No |
-| `GET` | `/api/auth/dashboard` | Access user profile and `plan_tier` | Bearer JWT |
+| `GET` | `/api/auth/dashboard` | Access user profile and plan tier | Bearer JWT |
 
-### 3. Subscriptions & Payments
+### 3. Workspaces & Multi-Tenancy
 | Method | Endpoint | Description | Auth Required |
 |---|---|---|---|
-| `POST` | `/api/subscriptions/create-checkout` | Generate Stripe Checkout URL ($20 one-time) | Bearer JWT |
-| `GET` | `/api/subscriptions/success` | Payment success callback landing page | No |
-| `GET` | `/api/subscriptions/cancel` | Payment cancellation callback landing page | No |
+| `GET` | `/api/tenants` | List workspaces accessible to the authenticated user | Bearer JWT |
+| `POST` | `/api/tenants` | Create new tenant workspace | Bearer JWT |
+| `GET` | `/api/tenants/current` | Get current workspace details and role | Bearer JWT + `X-Tenant-ID` |
+| `GET` | `/api/tenants/current/members` | List workspace members | Bearer JWT + `X-Tenant-ID` |
+| `POST` | `/api/tenants/current/members` | Invite new member (owner/admin only) | Bearer JWT + `X-Tenant-ID` |
+| `PATCH` | `/api/tenants/current/members/<id>` | Update member role (owner only) | Bearer JWT + `X-Tenant-ID` |
+| `DELETE` | `/api/tenants/current/members/<id>` | Remove member (owner/admin) | Bearer JWT + `X-Tenant-ID` |
 
-### 4. Webhooks
+### 4. Customers & Invoicing
 | Method | Endpoint | Description | Auth Required |
 |---|---|---|---|
-| `POST` | `/api/webhooks/stripe` | Stripe signed webhook receiver | `Stripe-Signature` Header |
+| `GET` | `/api/customers` | List workspace customers | Bearer JWT + `X-Tenant-ID` |
+| `POST` | `/api/customers` | Create customer | Bearer JWT + `X-Tenant-ID` |
+| `GET` | `/api/customers/<id>` | Get customer details | Bearer JWT + `X-Tenant-ID` |
+| `PATCH` | `/api/customers/<id>` | Update customer | Bearer JWT + `X-Tenant-ID` |
+| `DELETE` | `/api/customers/<id>` | Delete customer | Bearer JWT + `X-Tenant-ID` |
+| `GET` | `/api/invoices` | List workspace invoices | Bearer JWT + `X-Tenant-ID` |
+| `POST` | `/api/invoices` | Create draft invoice with line items | Bearer JWT + `X-Tenant-ID` |
+| `GET` | `/api/invoices/<id>` | Get invoice details | Bearer JWT + `X-Tenant-ID` |
+| `PATCH` | `/api/invoices/<id>` | Update invoice | Bearer JWT + `X-Tenant-ID` |
+| `DELETE` | `/api/invoices/<id>` | Delete invoice | Bearer JWT + `X-Tenant-ID` |
+| `POST` | `/api/invoices/<id>/issue` | Issue draft invoice (locks editing) | Bearer JWT + `X-Tenant-ID` |
+
+### 5. Payments & Webhooks
+| Method | Endpoint | Description | Auth Required |
+|---|---|---|---|
+| `POST` | `/api/subscriptions/create-checkout` | Generate Stripe Checkout URL | Bearer JWT |
+| `GET` | `/api/subscriptions/success` | Checkout success callback | No |
+| `GET` | `/api/subscriptions/cancel` | Checkout cancellation callback | No |
+| `POST` | `/api/webhooks/stripe` | Process signed Stripe webhook | `Stripe-Signature` header |
+
+### 6. Platform Operations (Admin/Operator Only)
+| Method | Endpoint | Description | Auth Required |
+|---|---|---|---|
+| `GET` | `/api/ops/outbox/failed` | List failed outbox events | Platform Operator/Admin JWT |
+| `GET` | `/api/ops/outbox/<id>` | Inspect failed outbox event details | Platform Operator/Admin JWT |
+| `POST` | `/api/ops/outbox/<id>/replay` | Replay failed event and record audit | Platform Operator/Admin JWT |
+| `GET` | `/api/ops/outbox/replay-audit` | List replay audit history | Platform Operator/Admin JWT |
+
+### 7. AI Assistant & Tenant-Aware RAG
+| Method | Endpoint | Description | Auth Required |
+|---|---|---|---|
+| `POST` | `/api/ai/chat` | Chat with AI (RAG context + read-only tools) | Bearer JWT + `X-Tenant-ID` |
+| `GET` | `/api/ai/conversations` | List user conversations in workspace | Bearer JWT + `X-Tenant-ID` |
+| `GET` | `/api/ai/conversations/<id>` | Fetch conversation message history | Bearer JWT + `X-Tenant-ID` |
+| `GET` | `/api/ai/usage` | Inspect token usage and costs | Bearer JWT + `X-Tenant-ID` |
+| `POST` | `/api/ai/knowledge/seed` | Seed platform knowledge documentation | Platform Operator/Admin JWT |
 
 ---
 
-## Quickstart (Local Development with Docker)
+## Quickstart & Local Development
 
-### 1. Prerequisites
-- [Docker](https://www.docker.com/) & Docker Compose
-- [Stripe CLI](https://stripe.com/docs/stripe-cli) (optional, for real end-to-end webhook testing)
-
-### 2. Configure Environment
-Copy `.env.example` to `.env`:
+### 1. Configure Environment
 ```bash
 cp .env.example .env
 ```
-Fill in your Stripe test mode keys:
+Ensure your `.env` contains valid credentials or development defaults:
 ```env
 FLASK_ENV=development
-POSTGRES_USER=abyflow_user
-POSTGRES_PASSWORD=abyflow_password
-POSTGRES_DB=abyflow_db
 DATABASE_URL=postgresql://abyflow_user:abyflow_password@db:5432/abyflow_db
 REDIS_URL=redis://redis:6379/0
 JWT_SECRET_KEY=dev_jwt_secret_key_change_me
-STRIPE_PUBLISHABLE_KEY=pk_test_your_key
 STRIPE_SECRET_KEY=sk_test_your_key
 STRIPE_WEBHOOK_SECRET=whsec_your_key
-APP_BASE_URL=http://localhost:5000
+# For local development without OpenAI credentials:
+OPENAI_API_KEY=
+AI_ALLOW_MOCK_EMBEDDINGS=true
 ```
 
-### 3. Build and Start Stack
+### 2. Start Application Stack
 ```bash
 docker compose up -d --build
 ```
-This starts 4 isolated containers:
-- `abyflow-db-1` (Postgres 15)
-- `abyflow-redis-1` (Redis 7)
-- `abyflow-web-1` (Gunicorn/Flask on port 5000)
-- `abyflow-worker-1` (Celery background worker)
 
-### 4. Verify Stack Health
+### 3. Apply Database Migrations
+Apply the tracked Alembic migrations before using the API:
 ```bash
-curl http://localhost:5000/health
+docker compose exec web flask db upgrade
 ```
-Expected output:
-```json
-{
-  "database": "connected",
-  "redis": "connected",
-  "status": "healthy"
-}
+The same operation can be run with `python scripts/init_db.py` from a host
+environment configured to reach the target database. Do not use `db.create_all()`
+as a substitute for the migration history.
+Containers started:
+- `abyflow-db-1`: PostgreSQL 15 with pgvector extension support.
+- `abyflow-redis-1`: Redis 7 broker.
+- `abyflow-web-1`: Flask REST API on port `5000`.
+- `abyflow-worker-1`: Celery background outbox processor.
+
+### 4. Provisioning a Platform Operator
+Workspace owners cannot manage platform infrastructure. Provision an operator using the secure host CLI:
+```bash
+python scripts/promote_operator.py admin@example.com --role operator
 ```
 
 ---
 
-## Testing
+## Automated Test Suites
 
-AbyFlow includes a comprehensive automated test suite with **32 unit and integration tests** using Pytest and an isolated in-memory SQLite database. Tests do not require active network connections or live Stripe credentials.
+AbyFlow provides comprehensive automated testing:
+- **Unit & Integration Suite:** In-memory SQLite with mocked external APIs for deterministic testing.
+- **PostgreSQL Integration Suite:** PostgreSQL row-locking, concurrency, pgvector retrieval, and tenant-isolation validation against a PostgreSQL 15 test database.
 
-### Run All Tests:
+### Install development tools:
+```bash
+pip install -r requirements-dev.txt
+```
+
+### Run the complete suite:
+Set `ABYFLOW_TEST_DATABASE_URL` to a dedicated PostgreSQL test database
+named `abyflow_concurrency_test`, then run:
 ```bash
 pytest -v
 ```
 
-### Test Coverage Summary:
-- **Auth (`test_auth.py`):** Registration, duplicate detection, email normalization/sanitization, password validation, login, invalid credentials, JWT expiration, and deleted-user dashboard security.
-- **Stripe (`test_stripe.py`):** Protected checkout session creation, mock Stripe API errors, cryptographic webhook signature validation, spoofing rejection, duplicate event idempotency, unsupported event handling, and automatic downgrade on payment failure.
-- **Services & Celery (`test_services.py`):** User tier transition idempotency, transactional rollbacks, and Celery task execution with backoff.
-- **Health (`test_health.py`):** Root metadata and degraded health check conditions.
+For the SQLite-only suite:
+```bash
+pytest -v --ignore=tests/postgres
+```
+
+### Generate coverage:
+```bash
+pytest --cov=app --cov-report=term-missing --cov-report=html
+```
+Open `htmlcov/index.html` to inspect uncovered lines.
 
 ---
 
-## End-to-End Stripe Verification with Stripe CLI
+## Production Deployment (AWS EC2)
 
-1. **Start the local Stripe CLI forwarder:**
+AbyFlow is optimized for zero-cost or low-cost deployment on AWS EC2 (`t3.micro` or `t4g.small`):
+1. **Launch Ubuntu 24.04 LTS EC2 instance** with Security Group allowing 22 (SSH), 80 (HTTP), 443 (HTTPS).
+2. Install Docker, Docker Compose, and Nginx.
+3. Configure `.env` with production credentials and run:
    ```bash
-   stripe listen --forward-to localhost:5000/api/webhooks/stripe
+   docker compose -f docker-compose.prod.yml up -d --build
    ```
-2. Note the generated webhook signing secret (`whsec_...`) and place it in your `.env` as `STRIPE_WEBHOOK_SECRET`.
-3. **Register & Log in:**
+4. Apply migrations once, from a single web container:
    ```bash
-   # Register
-   curl -X POST http://localhost:5000/api/auth/register \
-     -H "Content-Type: application/json" \
-     -d '{"email":"testuser@example.com","password":"Password123!"}'
-
-   # Login
-   curl -X POST http://localhost:5000/api/auth/login \
-     -H "Content-Type: application/json" \
-     -d '{"email":"testuser@example.com","password":"Password123!"}'
+   docker compose -f docker-compose.prod.yml exec web flask db upgrade
    ```
-4. **Create Checkout Session:**
-   ```bash
-   curl -X POST http://localhost:5000/api/subscriptions/create-checkout \
-     -H "Authorization: Bearer YOUR_JWT_TOKEN"
-   ```
-5. Open the returned `checkout_url` in your browser and complete the payment with Stripe test card `4242 4242 4242 4242`.
-6. Inspect Celery worker logs:
-   ```bash
-   docker compose logs --tail=20 worker
-   ```
-7. Verify updated plan tier:
-   ```bash
-   curl -X GET http://localhost:5000/api/auth/dashboard \
-     -H "Authorization: Bearer YOUR_JWT_TOKEN"
-   ```
-   Output: `"plan_tier": "pro"`
-
----
-
-## AWS EC2 Production Deployment Guide
-
-AbyFlow is optimized for ultra-low-cost deployment on a single **Ubuntu 24.04 LTS EC2 Instance** (e.g., `t3.micro` or `t4g.small` eligible under the AWS Free Tier).
-
-```mermaid
-graph TD
-    Internet[Internet Traffic] -->|Port 80 / 443| SG[AWS Security Group]
-    SG --> NginxHost[Nginx on Ubuntu Host]
-    NginxHost -->|Certbot SSL| HTTPS[Encrypted HTTPS]
-    NginxHost -->|Proxy :5000| DockerWeb[AbyFlow Web Container]
-    DockerWeb --> DockerNet[Internal Docker Network]
-    DockerNet --> DockerDB[Postgres Container - Port Closed to Host]
-    DockerNet --> DockerRedis[Redis Container - Port Closed to Host]
-    DockerNet --> DockerWorker[Celery Container]
-```
-
-### Step 1: Launch EC2 Instance
-1. AMI: **Ubuntu Server 24.04 LTS (HVM)**
-2. Instance Type: **t3.micro** (1 vCPU, 1 GB RAM) or **t4g.small**
-3. Storage: 20 GB gp3 root volume
-4. Configure Security Group:
-   - **SSH (Port 22):** Restrict to your IP address.
-   - **HTTP (Port 80):** Open to `0.0.0.0/0`.
-   - **HTTPS (Port 443):** Open to `0.0.0.0/0`.
-   - **DO NOT** open ports 5000, 5432, or 6379 to the public internet.
-
-### Step 2: Install Docker and Nginx on Ubuntu
-SSH into your EC2 instance:
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y docker.io docker-compose-v2 nginx certbot python3-certbot-nginx git
-sudo systemctl enable --now docker
-sudo usermod -aG docker ubuntu
-```
-*(Log out and log back in for docker group permissions to take effect)*
-
-### Step 3: Clone Repository and Configure Production Environment
-```bash
-git clone https://github.com/adithyaabhiram-28/AbyFlow.git
-cd AbyFlow
-cp .env.example .env
-nano .env
-```
-
-Set production values in `.env`:
-```env
-FLASK_ENV=production
-POSTGRES_USER=abyflow_prod_user
-POSTGRES_PASSWORD=GENERATE_A_STRONG_RANDOM_PASSWORD
-POSTGRES_DB=abyflow_prod_db
-DATABASE_URL=postgresql://abyflow_prod_user:GENERATE_A_STRONG_RANDOM_PASSWORD@db:5432/abyflow_prod_db
-REDIS_URL=redis://redis:6379/0
-JWT_SECRET_KEY=GENERATE_A_64_CHAR_HEX_KEY
-STRIPE_PUBLISHABLE_KEY=pk_live_your_key_or_test_key
-STRIPE_SECRET_KEY=sk_live_your_key_or_test_key
-STRIPE_WEBHOOK_SECRET=whsec_your_production_secret
-APP_BASE_URL=https://yourdomain.com
-```
-
-### Step 4: Start Production Containers
-```bash
-docker compose -f docker-compose.prod.yml up -d --build
-```
-Initialize database tables:
-```bash
-docker compose -f docker-compose.prod.yml exec web python scripts/init_db.py
-```
-
-### Step 5: Configure Nginx & Obtain Free Let's Encrypt SSL
-1. Copy the Nginx configuration:
-   ```bash
-   sudo cp nginx/abyflow.conf /etc/nginx/sites-available/abyflow.conf
-   sudo sed -i 's/YOUR_DOMAIN_OR_EC2_PUBLIC_IP/yourdomain.com/g' /etc/nginx/sites-available/abyflow.conf
-   sudo ln -s /etc/nginx/sites-available/abyflow.conf /etc/nginx/sites-enabled/
-   sudo rm -f /etc/nginx/sites-enabled/default
-   sudo nginx -t
-   sudo systemctl reload nginx
-   ```
-2. Obtain free SSL certificate with Certbot:
-   ```bash
-   sudo certbot --nginx -d yourdomain.com
-   ```
-3. Set up Stripe Production Webhook Destination:
-   - In your Stripe Dashboard, configure the webhook endpoint URL to:  
-     `https://yourdomain.com/api/webhooks/stripe`
-   - Select events: `checkout.session.completed`, `invoice.payment_failed`.
-
----
-
-## AWS Cost Breakdown & Cleanup
-
-### Estimated Monthly Cost (Free Tier Eligible):
-- **EC2 `t3.micro`:** $0.00 / month (first 12 months with AWS Free Tier; ~$7.50/month thereafter).
-- **EBS Storage (20 GB gp3):** $0.00 / month (under 30 GB Free Tier allowance).
-- **PostgreSQL / Redis / Celery:** $0.00 (running as self-hosted containers on the same EC2 instance).
-- **Let's Encrypt SSL:** Free forever.
-
-### Decommissioning / Stopping Charges:
-To completely terminate billing:
-1. In AWS EC2 Console, select the instance and choose **Instance State → Terminate**.
-2. Release any allocated **Elastic IP** under Network & Security.
-
----
-
-## Security Hardening Highlights
-
-1. **Zero Secret Leakage:** No keys, tokens, or raw payloads are ever output to logs or exception responses.
-2. **Container Security:** Application containers execute under a non-root `appuser` (UID 1000).
-3. **Database & Cache Isolation:** PostgreSQL and Redis ports are bound strictly to internal Docker bridge networks with no external exposure.
-4. **Cryptographic Webhook Verification:** All Stripe webhook requests require valid signatures computed against raw payloads before any deserialization or dispatch.
-5. **Atomic Idempotency:** Webhook event IDs are guarded by database-level unique constraints with rollback handling to prevent duplicate task execution.
-6. **JWT Expiration:** Configurable token expiration (default: 24 hours).
+5. Configure the host Nginx reverse proxy to forward HTTPS traffic to `127.0.0.1:5000`, and provision TLS with Certbot. The Nginx configuration is managed on the host and is not included in this repository.
