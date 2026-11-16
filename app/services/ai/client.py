@@ -193,7 +193,7 @@ class GeminiClient(BaseAIClient):
     ) -> Dict[str, Any]:
         from google.genai import types
 
-        model = model or current_app.config.get('AI_MODEL', 'gemini-3.8-flash')
+        model = model or current_app.config.get('AI_MODEL', 'gemini-2.5-flash')
         temperature = temperature if temperature is not None else current_app.config.get('AI_TEMPERATURE', 0.0)
         max_tokens = max_tokens or current_app.config.get('AI_MAX_TOKENS', 1024)
         system_instruction, contents = self._convert_messages(messages, types)

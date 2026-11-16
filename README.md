@@ -259,7 +259,7 @@ Configure the required environment variables in `.env`:
 ```env
 FLASK_ENV=development
 GEMINI_API_KEY=your_gemini_api_key
-AI_MODEL=gemini-3.8-flash
+AI_MODEL=gemini-2.5-flash
 AI_EMBEDDING_MODEL=gemini-embedding-001
 GEMINI_BILLING_TIER=free
 AI_ALLOW_MOCK_EMBEDDINGS=true

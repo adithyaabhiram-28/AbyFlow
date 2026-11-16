@@ -81,7 +81,7 @@ def process_chat_message(
         api_messages.append(msg_obj)
 
     ai_client = client or get_ai_client()
-    model_name = current_app.config.get('AI_MODEL', 'gemini-3.8-flash')
+    model_name = current_app.config.get('AI_MODEL', 'gemini-2.5-flash')
 
     total_prompt_tokens = 0
     total_completion_tokens = 0
